@@ -1,0 +1,292 @@
+const express = require('express');
+const router = express.Router();
+const auth = require('../services/auth');
+const phoneAuth = require('../services/phoneAuth');
+
+const SCHEME_CODE = 'FC220000013025071';
+
+// ===== 获取 H5 SDK 初始化令牌 =====
+const h5Token = require('../services/h5Token');
+
+router.get('/token-check', (req, res) => {
+  res.json({ token: req.headers['x-auth-token'] || 'none', method: req.method, path: req.path });
+});
+
+router.post('/get-h5-token', async (req, res) => {
+  try {
+    const { schemeCode } = req.body;
+    const result = await h5Token.getH5AccessToken(schemeCode || SCHEME_CODE);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== 获取认证配置（H5 SDK 使用） =====
+router.post('/get-auth-config', (req, res) => {
+  const { schemeCode } = req.body;
+  res.json({
+    schemeCode: schemeCode || SCHEME_CODE,
+    carrierEndpoints: {
+      cm: 'https://dypns-operator.oss-cn-hangzhou.aliyuncs.com/cmLoginJssdk',
+      cu: 'https://dypns-operator.oss-cn-hangzhou.aliyuncs.com/cuLoginJssdk',
+      ct: 'https://dypns-operator.oss-cn-hangzhou.aliyuncs.com/EAccountSDK-fjs-1.5.1.min.js',
+    },
+    pnsEndpoint: 'https://dypns.alysm.cn/pns/authPnsWeb',
+  });
+});
+
+// ===== 手机号一键登录 - 获取认证URL =====
+router.get('/phone-login-url', async (req, res) => {
+  try {
+    const callbackUrl = `https://changban.xyz/phone-auth.html`;
+    const url = await phoneAuth.getAuthUrl(SCHEME_CODE, callbackUrl);
+    res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== 手机号一键登录（带手机号） =====
+router.post('/phone-login-url', async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (phone && !/^1\d{10}$/.test(phone)) {
+      return res.status(400).json({ error: '请输入正确的手机号' });
+    }
+    const callbackUrl = `https://changban.xyz/phone-auth.html`;
+    const url = await phoneAuth.getAuthUrl(SCHEME_CODE, callbackUrl, phone || undefined);
+    res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== 手机号一键登录 - 验证 =====
+router.post('/phone-login', async (req, res) => {
+  try {
+    const { spToken } = req.body;
+    if (!spToken) return res.status(400).json({ error: '缺少认证凭证' });
+
+    // 获取手机号
+    const phone = await phoneAuth.getPhoneBySpToken(spToken);
+
+    // 找已有用户或自动注册
+    const storage = require('../services/storage');
+    const users = storage.read('users');
+    let user = Object.values(users).find(u => u.phone === phone);
+    
+    if (!user) {
+      // 自动注册
+      const username = 'u' + phone.slice(-4);
+      const role = auth.hasAnyUser() ? 'user' : 'admin';
+      const created = auth.createUser(username, phone.slice(-6), role);
+      if (!created) return res.status(500).json({ error: '注册失败' });
+      // 保存手机号
+      const u = storage.read('users');
+      if (u[username]) {
+        u[username].phone = phone;
+        storage.write('users', u);
+      }
+      user = { id: u[username].id, username, role };
+    }
+
+    const tk = auth.login(user.username, user.phone?.slice(-6) || phone.slice(-6));
+    if (!tk) return res.status(500).json({ error: '登录失败' });
+
+    res.json({ token: tk, user: { id: user.id, username: user.username, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== 发送验证码（个人项目，验证码直接返回给管理员） =====
+const fs = require('fs');
+const path = require('path');
+const verifyCodes = {};
+
+router.post('/send-code', (req, res) => {
+  const { phone } = req.body;
+  if (!phone || !/^1\d{10}$/.test(phone)) {
+    return res.status(400).json({ error: '请输入正确的手机号' });
+  }
+  
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  verifyCodes[phone] = { code, expiresAt: Date.now() + 300000 }; // 5分钟有效
+  
+  // 写入文件供管理员查看
+  const codeFile = path.join(__dirname, '..', '..', 'data', 'verify-codes.json');
+  try {
+    const bak = fs.existsSync(codeFile) ? JSON.parse(fs.readFileSync(codeFile, 'utf8')) : {};
+    bak[phone] = { code, expiresAt: Date.now() + 300000, createdAt: new Date().toISOString() };
+    fs.mkdirSync(path.dirname(codeFile), { recursive: true });
+    fs.writeFileSync(codeFile, JSON.stringify(bak, null, 2));
+  } catch(e) { /* ignore */ }
+  
+  res.json({ success: true, message: '验证码已发送' });
+});
+
+router.post('/verify-code', (req, res) => {
+  const { phone, code } = req.body;
+  if (!phone || !code) return res.status(400).json({ error: '参数不完整' });
+  
+  const record = verifyCodes[phone];
+  if (!record) return res.status(400).json({ error: '请先获取验证码' });
+  if (Date.now() > record.expiresAt) {
+    delete verifyCodes[phone];
+    return res.status(400).json({ error: '验证码已过期' });
+  }
+  if (record.code !== code) return res.status(400).json({ error: '验证码错误' });
+  
+  delete verifyCodes[phone];
+  
+  // 检查手机号是否已注册
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  const existingUser = Object.values(users).find(u => u.phone === phone);
+  
+  if (existingUser) {
+    // 已注册：直接登录
+    const tk = auth.login(existingUser.username, existingUser.phone?.slice(-6) || phone.slice(-6));
+    if (!tk) return res.status(500).json({ error: '登录失败' });
+    return res.json({ token: tk, user: { id: existingUser.id, username: existingUser.username, role: existingUser.role }, existing: true });
+  }
+  
+  // 新用户：返回验证令牌，前端弹注册表单
+  const verifyToken = require('crypto').randomBytes(16).toString('hex');
+  // 存验证令牌（有效期10分钟）
+  const vf = path.join(__dirname, '..', '..', 'data', 'verify-tokens.json');
+  try {
+    const bak = fs.existsSync(vf) ? JSON.parse(fs.readFileSync(vf, 'utf8')) : {};
+    bak[verifyToken] = { phone, expiresAt: Date.now() + 600000 };
+    fs.mkdirSync(path.dirname(vf), { recursive: true });
+    fs.writeFileSync(vf, JSON.stringify(bak, null, 2));
+  } catch(e) { /* ignore */ }
+  
+  res.json({ verified: true, verifyToken, existing: false });
+});
+
+// ===== 手机号验证后注册（设置用户名+密码） =====
+router.post('/register-by-phone', (req, res) => {
+  const { verifyToken, username, password } = req.body;
+  if (!verifyToken || !username || !password) return res.status(400).json({ error: '参数不完整' });
+  if (password.length < 4) return res.status(400).json({ error: '密码至少4位' });
+  if (username.length < 2) return res.status(400).json({ error: '用户名至少2个字符' });
+  
+  // 验证令牌
+  const vf = path.join(__dirname, '..', '..', 'data', 'verify-tokens.json');
+  let tokens = {};
+  try { tokens = JSON.parse(fs.readFileSync(vf, 'utf8')); } catch(e) {}
+  const record = tokens[verifyToken];
+  if (!record) return res.status(400).json({ error: '验证已过期，请重新获取验证码' });
+  if (Date.now() > record.expiresAt) {
+    delete tokens[verifyToken];
+    fs.writeFileSync(vf, JSON.stringify(tokens, null, 2));
+    return res.status(400).json({ error: '验证已过期，请重新获取验证码' });
+  }
+  
+  delete tokens[verifyToken];
+  fs.writeFileSync(vf, JSON.stringify(tokens, null, 2));
+  
+  // 创建用户
+  const role = auth.hasAnyUser() ? 'user' : 'admin';
+  const created = auth.createUser(username, password, role);
+  if (!created) return res.status(409).json({ error: '用户名已存在' });
+  
+  // 保存手机号
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  if (users[username]) {
+    users[username].phone = record.phone;
+    storage.write('users', users);
+  }
+  
+  // 自动登录
+  const tk = auth.login(username, password);
+  if (!tk) return res.status(500).json({ error: '登录失败' });
+  
+  res.json({ token: tk, user: { id: created.id, username, role } });
+});
+
+// ===== 状态检查 =====
+router.get('/status', (req, res) => {
+  res.json({ hasUsers: auth.hasAnyUser() });
+});
+
+// ===== 注册（第一个用户为管理员，后续用户由管理员添加） =====
+router.post('/register', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: '请填写用户名和密码' });
+  if (password.length < 4) return res.status(400).json({ error: '密码至少4位' });
+  if (username.length < 2) return res.status(400).json({ error: '用户名至少2个字符' });
+
+  const role = auth.hasAnyUser() ? 'user' : 'admin';
+  const user = auth.createUser(username, password, role);
+  if (!user) return res.status(409).json({ error: '用户名已存在' });
+
+  const token = auth.login(username, password);
+  res.json({ token, user });
+});
+
+// ===== 登录 =====
+router.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: '请填写用户名和密码' });
+
+  const token = auth.login(username, password);
+  if (!token) return res.status(401).json({ error: '用户名或密码错误' });
+
+  const session = auth.verifyToken(token);
+  res.json({ token, user: { id: session.userId, username: session.username, role: session.role } });
+});
+
+// ===== 修改密码 =====
+router.post('/change-password', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).json({ error: '请先登录' });
+  const session = auth.verifyToken(token);
+  if (!session) return res.status(401).json({ error: '登录已过期' });
+  
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: '请填写旧密码和新密码' });
+  if (newPassword.length < 4) return res.status(400).json({ error: '新密码至少4位' });
+  
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  const user = users[session.username];
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  
+  // 验证旧密码
+  const crypto = require('crypto');
+  const [salt, hash] = user.passwordHash.split(':');
+  const verify = crypto.scryptSync(oldPassword, salt, 64).toString('hex');
+  if (hash !== verify) return res.status(400).json({ error: '旧密码错误' });
+  
+  // 更新密码
+  const newSalt = crypto.randomBytes(16).toString('hex');
+  const newHash = crypto.scryptSync(newPassword, newSalt, 64).toString('hex');
+  user.passwordHash = `${newSalt}:${newHash}`;
+  storage.write('users', users);
+  
+  // 生成新 token
+  const newToken = auth.login(session.username, newPassword);
+  res.json({ token: newToken, message: '密码已修改' });
+});
+
+// ===== 退出 =====
+router.post('/logout', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (token) auth.logout(token);
+  res.json({ success: true });
+});
+
+// ===== 验证 Token =====
+router.get('/me', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).json({ error: '未登录' });
+  const session = auth.verifyToken(token);
+  if (!session) return res.status(401).json({ error: '登录已过期' });
+  res.json({ user: { id: session.userId, username: session.username, role: session.role } });
+});
+
+module.exports = router;

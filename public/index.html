@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕊️</text></svg>">
+  <title>常伴</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- === 登录页 === -->
+    <main id="page-login" class="page active">
+      <div class="auth-container">
+        <div class="auth-logo">🕊️</div>
+        <h2 class="auth-title">常伴</h2>
+        <p class="auth-desc">登录后继续</p>
+
+        <!-- 登录 -->
+        <form id="loginForm" onsubmit="doLogin(event)" class="auth-form">
+          <div class="form-group">
+            <input type="text" id="loginUser" placeholder="用户名" required>
+          </div>
+          <div class="form-group">
+            <input type="password" id="loginPass" placeholder="密码" required>
+          </div>
+          <button type="submit" class="btn-primary">登录</button>
+          <p id="loginError" class="auth-error"></p>
+        </form>
+
+
+
+        <!-- 手机号注册入口 -->
+        <div class="auth-divider">没有账号？</div>
+        <a href="/phone-auth.html" class="btn-primary" style="display:block;text-align:center;text-decoration:none;padding:14px;border-radius:10px;margin-top:8px">📱 手机号注册</a>
+      </div>
+    </main>
+
+    <!-- 顶部导航 -->
+    <header id="header" style="display:none">
+      <button id="backBtn" class="icon-btn" style="display:none" onclick="navigate('home')">‹</button>
+      <h1 id="headerTitle">🕊️ 常伴</h1>
+      <button id="settingsBtn" class="icon-btn" onclick="navigate('settings')">⚙️</button>
+    </header>
+
+    <!-- === 首页：角色列表 === -->
+    <main id="page-home" class="page">
+      <div class="welcome">
+        <p>为已经离开的人，留下一份可以对话的记忆</p>
+      </div>
+      <div id="charList" class="char-list"></div>
+      <button class="fab" onclick="navigate('create')">＋ 创建角色</button>
+    </main>
+
+    <!-- === 创建角色 === -->
+    <main id="page-create" class="page">
+      <form id="createForm" onsubmit="saveCharacter(event)">
+        <div class="form-group">
+          <label>称呼 *</label>
+          <input type="text" id="charName" placeholder="例如：爸爸、奶奶、小美" required>
+        </div>
+        <div class="form-group">
+          <label>TA 是谁</label>
+          <input type="text" id="charRelation" placeholder="例如：我的父亲、我的外婆">
+        </div>
+        <div class="form-group">
+          <label>性格特点（越详细越好）</label>
+          <textarea id="charPersonality" rows="3" placeholder="例如：温柔又唠叨，总是关心我吃没吃饭…"></textarea>
+        </div>
+        <div class="form-group">
+          <label>共同回忆 / 他常说的话</label>
+          <textarea id="charMemories" rows="3" placeholder="回忆越丰富，对话越真实"></textarea>
+        </div>
+        <div class="form-group">
+          <label>方言 / 说话风格</label>
+          <select id="charDialect">
+            <option value="">普通话（默认）</option>
+            <option value="四川话">四川话</option>
+            <option value="东北话">东北话</option>
+            <option value="粤语">粤语</option>
+            <option value="上海话">上海话</option>
+            <option value="湖南话">湖南话</option>
+            <option value="河南话">河南话</option>
+            <option value="陕西话">陕西话</option>
+            <option value="台湾腔">台湾腔</option>
+            <option value="其他">其他（在性格中描述）</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-primary">创建角色 ✨</button>
+      </form>
+    </main>
+
+    <!-- === 编辑角色 === -->
+    <main id="page-edit" class="page">
+      <form id="editForm" onsubmit="updateCharacter(event)">
+        <input type="hidden" id="editId">
+        <div class="form-group">
+          <label>头像</label>
+          <div class="avatar-upload">
+            <img id="editAvatar" src="" alt="头像" class="avatar-preview" style="display:none">
+            <input type="file" id="editAvatarInput" accept="image/*" onchange="uploadAvatar(event)">
+            <label for="editAvatarInput" class="avatar-btn">📷 上传照片</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>称呼</label>
+          <input type="text" id="editName" required>
+        </div>
+        <div class="form-group">
+          <label>TA 是谁</label>
+          <input type="text" id="editRelation">
+        </div>
+        <div class="form-group">
+          <label>性格特点</label>
+          <textarea id="editPersonality" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>共同回忆</label>
+          <textarea id="editMemories" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>方言 / 说话风格</label>
+          <select id="editDialect">
+            <option value="">普通话（默认）</option>
+            <option value="四川话">四川话</option>
+            <option value="东北话">东北话</option>
+            <option value="粤语">粤语</option>
+            <option value="上海话">上海话</option>
+            <option value="湖南话">湖南话</option>
+            <option value="河南话">河南话</option>
+            <option value="陕西话">陕西话</option>
+            <option value="台湾腔">台湾腔</option>
+            <option value="其他">其他（在性格中描述）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>声音设置</label>
+          <div class="voice-clone-area">
+            <p class="hint">选择或录制一段 TA 的录音（10-60 秒最佳）</p>
+            <div class="voice-buttons">
+              <div class="voice-upload-box" id="voiceUploadBox" onclick="document.getElementById('voiceSample').click()">
+                <input type="file" id="voiceSample" accept="audio/*,video/*,.mp4,.mov,.avi,.mkv" style="display:none" onchange="onVoiceFileSelected(event)">
+                <span class="upload-icon">📁</span>
+                <span class="upload-text" id="voiceFileName">选择音频或视频</span>
+              </div>
+              <button type="button" class="btn-secondary record-btn" id="recordVoiceBtn" onclick="startCloneRecording()">🎙️ 录制</button>
+            </div>
+            <div id="segmentArea" style="display:none;margin-top:12px">
+              <p class="hint">视频已分割为以下片段，选择目标人物的声音克隆：</p>
+              <div id="segmentList"></div>
+            </div>
+            <button type="button" class="btn-primary clone-btn" id="cloneBtn" onclick="cloneVoice()">🎤 克隆声音</button>
+            <p id="voiceStatus" class="hint"></p>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">保存修改</button>
+        <button type="button" class="btn-danger" onclick="deleteCharacter()">删除角色</button>
+      </form>
+    </main>
+
+    <!-- === 对话页面 === -->
+    <main id="page-chat" class="page">
+      <div id="chatHeader" class="chat-header">
+        <div class="char-info">
+          <img id="chatAvatar" src="" alt="" class="chat-avatar">
+          <div>
+            <strong id="chatName"></strong>
+            <span id="chatRelation" class="relation-tag"></span>
+          </div>
+        </div>
+        <button class="icon-btn" onclick="clearChat()">🗑️</button>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div class="chat-input-area">
+        <button id="voiceInputBtn" class="icon-btn voice-btn" onclick="startVoiceInput()">🎤</button>
+        <input type="text" id="chatInput" placeholder="说点什么…" onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="send-btn" onclick="sendMessage()">发送</button>
+      </div>
+    </main>
+
+    <!-- === 设置 === -->
+    <main id="page-settings" class="page">
+      <div class="settings-section">
+        <h3>🤖 AI 模型</h3>
+        <div class="form-group">
+          <label>模型提供商</label>
+          <select id="setProvider" onchange="onProviderChange()">
+            <option value="openai">OpenAI</option>
+            <option value="deepseek">DeepSeek（推荐）</option>
+            <option value="moonshot">月之暗面 Moonshot</option>
+            <option value="qwen">通义千问</option>
+            <option value="glm">智谱 GLM</option>
+            <option value="custom">自定义（Ollama 等）</option>
+          </select>
+        </div>
+        <div class="form-group" id="customBaseURLGroup" style="display:none">
+          <label>自定义接口地址</label>
+          <input type="text" id="setCustomBaseURL" placeholder="http://localhost:11434/v1">
+        </div>
+        <div class="form-group">
+          <label>模型名称</label>
+          <input type="text" id="setModel" placeholder="留空使用默认">
+          <p class="hint" id="modelHint"></p>
+        </div>
+        <p class="hint" style="color:var(--text-dim);margin-top:8px">💡 API Key 已在服务端配置，无需填写</p>
+      </div>
+
+      <div class="settings-section">
+        <h3>🔊 语音</h3>
+        <p class="hint">使用 ElevenLabs 克隆声音，对话时自动朗读回复</p>
+        <p class="hint" style="margin-top:4px">API Key 已在服务端配置</p>
+      </div>
+
+      <div class="settings-section">
+        <h3>🔑 更改密码</h3>
+        <div class="form-group">
+          <input type="password" id="oldPass" placeholder="当前密码">
+        </div>
+        <div class="form-group">
+          <input type="password" id="newPass" placeholder="新密码（至少4位）">
+        </div>
+        <div class="form-group">
+          <input type="password" id="newPass2" placeholder="再次输入新密码">
+        </div>
+        <button class="btn-primary" onclick="changePassword()" style="width:100%">修改密码</button>
+        <p id="passMsg" class="auth-error"></p>
+      </div>
+
+      <div class="settings-section">
+        <h3>📋 说明</h3>
+        <ol class="instructions">
+          <li>创建议角色，填写性格和回忆</li>
+          <li>上传一段录音克隆声音</li>
+          <li>开始对话，TA 会用熟悉的声音回应你</li>
+        </ol>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/app.js?v=3"></script>
+</body>
+</html>

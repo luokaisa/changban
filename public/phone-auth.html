@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>手机登录 - 常伴</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f0f1a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,sans-serif}
+.container{text-align:center;padding:40px 20px;max-width:360px;width:100%}
+.logo{font-size:64px;margin-bottom:12px}
+h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,#a78bfa,#ec4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+p{color:#94a3b8;font-size:14px;margin-bottom:16px;line-height:1.6}
+input{width:100%;padding:14px;font-size:16px;background:#1a1a2e;border:1px solid #334155;border-radius:10px;color:#e2e8f0;outline:none;text-align:center;letter-spacing:2px;margin-bottom:12px}
+input:focus{border-color:#7c3aed}
+button{width:100%;padding:16px;font-size:17px;font-weight:600;background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;border:none;border-radius:12px;cursor:pointer;margin-bottom:8px}
+button:disabled{opacity:.5;cursor:not-allowed}
+#msg{font-size:13px;margin-top:8px;min-height:24px;color:#94a3b8}
+.error{color:#ef4444}.success{color:#22c55e}.info{color:#a78bfa}
+.step{display:none}.step.active{display:block}
+a{display:block;margin-top:16px;color:#64748b;font-size:13px;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">📱</div>
+  <h1>常伴</h1>
+
+  <!-- 第一步：手机号+验证码 -->
+  <div id="stepPhone" class="step active">
+    <p>输入手机号获取验证码</p>
+    <input id="phone" type="tel" maxlength="11" placeholder="手机号" inputmode="numeric">
+    <button id="sendBtn" onclick="sendCode()">发送验证码</button>
+    <input id="code" type="text" maxlength="6" placeholder="6位验证码" inputmode="numeric">
+    <button id="verifyBtn" onclick="verifyCode()">验证</button>
+  </div>
+
+  <!-- 第二步：新用户设置用户名密码 -->
+  <div id="stepRegister" class="step">
+    <p>🎉 手机验证成功！<br>请设置你的账号信息</p>
+    <input id="regUser" type="text" maxlength="20" placeholder="用户名" autocomplete="username">
+    <input id="regPass" type="password" maxlength="30" placeholder="密码" autocomplete="new-password">
+    <input id="regPass2" type="password" maxlength="30" placeholder="再次输入密码" autocomplete="new-password">
+    <button id="regBtn" onclick="register()">注册并登录</button>
+  </div>
+
+  <div id="msg"></div>
+  <a href="/">← 使用密码登录</a>
+</div>
+
+<script>
+var verifyToken = '';
+
+function sendCode(){
+  var p=document.getElementById('phone').value.trim();
+  if(!/^1\d{10}$/.test(p)) return msg('❌ 请输入11位手机号','error');
+  document.getElementById('sendBtn').disabled=true;
+  msg('⏳ 发送中...','');
+  ajax('POST','/api/auth/send-code',{phone:p},function(d){
+    if(d.error){msg('❌ '+d.error,'error');document.getElementById('sendBtn').disabled=false;return;}
+    msg('✅ 验证码已发送','success');
+    countdown(60);
+  },function(){msg('❌ 发送失败','error');document.getElementById('sendBtn').disabled=false;});
+}
+
+function verifyCode(){
+  var p=document.getElementById('phone').value.trim();
+  var c=document.getElementById('code').value.trim();
+  if(!c||c.length!==6) return msg('❌ 请输入6位验证码','error');
+  document.getElementById('verifyBtn').disabled=true;
+  msg('⏳ 验证中...','');
+  ajax('POST','/api/auth/verify-code',{phone:p,code:c},function(d){
+    if(d.error){msg('❌ '+d.error,'error');document.getElementById('verifyBtn').disabled=false;return;}
+    
+    if(d.existing){
+      // 老用户：直接登录
+      localStorage.setItem('auth_token',d.token);
+      msg('✅ 登录成功！','success');
+      setTimeout(function(){window.location.href='/';},500);
+    }else{
+      // 新用户：弹出注册表单
+      verifyToken=d.verifyToken;
+      showStep('stepRegister');
+      msg('✅ 手机已验证，请设置账号','success');
+    }
+  },function(){msg('❌ 验证失败','error');document.getElementById('verifyBtn').disabled=false;});
+}
+
+function register(){
+  var u=document.getElementById('regUser').value.trim();
+  var p=document.getElementById('regPass').value;
+  var p2=document.getElementById('regPass2').value;
+  
+  if(u.length<2) return msg('❌ 用户名至少2个字符','error');
+  if(p.length<4) return msg('❌ 密码至少4位','error');
+  if(p!==p2) return msg('❌ 两次密码不一致','error');
+  
+  document.getElementById('regBtn').disabled=true;
+  msg('⏳ 注册中...','');
+  ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:u,password:p},function(d){
+    if(d.error){msg('❌ '+d.error,'error');document.getElementById('regBtn').disabled=false;return;}
+    localStorage.setItem('auth_token',d.token);
+    msg('✅ 注册成功！','success');
+    setTimeout(function(){window.location.href='/';},500);
+  },function(){msg('❌ 注册失败','error');document.getElementById('regBtn').disabled=false;});
+}
+
+function showStep(id){
+  document.querySelectorAll('.step').forEach(function(s){s.classList.remove('active');});
+  document.getElementById(id).classList.add('active');
+}
+
+function countdown(s){
+  var btn=document.getElementById('sendBtn');
+  var t=setInterval(function(){
+    btn.textContent='重新发送('+s+'s)';
+    if(--s<0){clearInterval(t);btn.textContent='发送验证码';btn.disabled=false;}
+  },1000);
+}
+
+function ajax(method,url,data,ok,fail){
+  var x=new XMLHttpRequest();
+  x.open(method,url,true);
+  x.setRequestHeader('Content-Type','application/json');
+  x.onload=function(){
+    try{var d=JSON.parse(x.responseText);ok(d);}catch(e){fail();}
+  };
+  x.onerror=fail;
+  x.send(JSON.stringify(data));
+}
+
+function msg(t,c){var m=document.getElementById('msg');m.textContent=t;m.className=c||'';}
+</script>
+</body>
+</html>
