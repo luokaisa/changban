@@ -7,8 +7,53 @@ const openai = require('../services/openai');
 const elevenlabs = require('../services/elevenlabs');
 const config = require('../config');
 
+const MAX_AUDIO_FILES = 50;      // TTS 回复音频最多保留份数
+const SPLIT_PREVIEW_TTL = 7 * 24 * 3600 * 1000;  // 切片预览 7 天过期
+
+/** 清理策略：TTS 音频只留最新 50 个；split 预览超 7 天删除 */
+function pruneAudioFiles() {
+  const uploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads');
+  try {
+    const audios = fs.readdirSync(uploadsDir)
+      .filter(f => /^audio_\d+\.mp3$/.test(f))
+      .map(f => ({ f, mtime: fs.statSync(path.join(uploadsDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const { f } of audios.slice(MAX_AUDIO_FILES)) {
+      try { fs.unlinkSync(path.join(uploadsDir, f)); } catch {}
+    }
+  } catch {}
+  try {
+    const splitDir = path.join(uploadsDir, 'split');
+    const cutoff = Date.now() - SPLIT_PREVIEW_TTL;
+    for (const f of fs.readdirSync(splitDir)) {
+      const p = path.join(splitDir, f);
+      try { if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p); } catch {}
+    }
+  } catch {}
+}
+
+// 启动时清理一次历史积压
+pruneAudioFiles();
+
 // 对话历史按用户隔离: { userId_charId: [messages] }
-const conversations = {};
+// 持久化到 data/conversations.json，进程重启不丢失
+const MAX_HISTORY = 200;
+
+let conversations = storage.read('conversations');
+// 启动时裁剪超长历史，防止文件无限膨胀
+for (const key of Object.keys(conversations)) {
+  if (Array.isArray(conversations[key]) && conversations[key].length > MAX_HISTORY) {
+    conversations[key] = conversations[key].slice(-MAX_HISTORY);
+  }
+}
+
+function saveConversations() {
+  try {
+    storage.write('conversations', conversations);
+  } catch (err) {
+    console.error('对话持久化失败:', err.message);
+  }
+}
 
 function getKey(userId, characterId) {
   return `${userId}_${characterId}`;
@@ -24,6 +69,10 @@ function addMessage(userId, characterId, role, content) {
   const key = getKey(userId, characterId);
   if (!conversations[key]) conversations[key] = [];
   conversations[key].push({ role, content });
+  if (conversations[key].length > MAX_HISTORY) {
+    conversations[key] = conversations[key].slice(-MAX_HISTORY);
+  }
+  saveConversations();
 }
 
 /** 发送消息 → AI 回复 + 语音 */
@@ -66,6 +115,7 @@ router.post('/:characterId', async (req, res) => {
         const audioPath = path.join(__dirname, '..', '..', 'public', 'uploads', audioFile);
         fs.writeFileSync(audioPath, audioBuffer);
         audioUrl = `/uploads/${audioFile}`;
+        pruneAudioFiles();
       } catch (ttsErr) {
         console.error('TTS 失败:', ttsErr.message);
       }
@@ -81,6 +131,7 @@ router.post('/:characterId', async (req, res) => {
 router.delete('/:characterId', (req, res) => {
   const key = getKey(req.user.userId, req.params.characterId);
   delete conversations[key];
+  saveConversations();
   res.json({ success: true });
 });
 

@@ -12,12 +12,6 @@ function requireAuth(req, res, next) {
 
   const session = auth.verifyToken(token);
   
-  // 克隆和分割接口不强制登录
-  if (!session && (fullPath.includes('/voices/clone') || fullPath.includes('/voices/split'))) {
-    req.user = null;
-    return next();
-  }
-  
   if (!session) {
     return res.status(401).json({ error: '请先登录' });
   }

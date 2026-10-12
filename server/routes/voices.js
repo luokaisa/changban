@@ -14,10 +14,21 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
+/** 校验角色存在且归属当前用户；不通过则返回 { status, error } */
+function checkOwnership(characterId, userId) {
+  const chars = storage.read('characters');
+  const character = chars[characterId];
+  if (!character) return { status: 404, error: '角色不存在' };
+  if (character.userId !== userId) return { status: 403, error: '无权操作该角色' };
+  return { character, chars };
+}
+
 /** 上传视频 -> 分割成多段音频，返回列表供用户选择 */
 router.post('/split/:characterId', upload.single('video'), async (req, res) => {
   try {
     const { characterId } = req.params;
+    const owned = checkOwnership(characterId, req.user.userId);
+    if (owned.error) return res.status(owned.status).json({ error: owned.error });
     if (!req.file) return res.status(400).json({ error: '请上传视频文件' });
 
     const filePath = req.file.path;
@@ -114,6 +125,8 @@ router.post('/split/:characterId', upload.single('video'), async (req, res) => {
 router.post('/clone/:characterId', upload.single('audio'), async (req, res) => {
   try {
     const { characterId } = req.params;
+    const owned = checkOwnership(characterId, req.user.userId);
+    if (owned.error) return res.status(owned.status).json({ error: owned.error });
     const segmentIndex = req.body.segmentIndex;
     let audioBuffer;
 
@@ -152,8 +165,9 @@ router.post('/clone/:characterId', upload.single('audio'), async (req, res) => {
 
 /** 获取片段列表 */
 router.get('/segments/:characterId', (req, res) => {
-  const chars = storage.read('characters');
-  res.json((chars[req.params.characterId] && chars[req.params.characterId].segments) || []);
+  const owned = checkOwnership(req.params.characterId, req.user.userId);
+  if (owned.error) return res.status(owned.status).json({ error: owned.error });
+  res.json(owned.character.segments || []);
 });
 
 module.exports = router;
