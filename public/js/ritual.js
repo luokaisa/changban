@@ -134,9 +134,9 @@ async function startMeetingRitual(characterId) {
   const reply = (greet && greet.reply) || ('好久不见，我很想你。');
   const audioUrl = greet && greet.audioUrl;
 
-  // 听见声音 → 画面渐显
+  // 听见声音（只留播放指示器，不放文字） → 画面渐显
   ritualEl().querySelector('.ritual-center').innerHTML =
-    '<div class="ritual-text small">听…那是 TA 的声音</div>';
+    '<div class="ritual-eq"><span></span><span></span><span></span><span></span><span></span></div>';
   const audioP = playRitualAudio(audioUrl);
   await sleep(1200);
   if (ritualSkipped) { enterChat(characterId); return; }
