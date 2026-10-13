@@ -5,10 +5,10 @@ const fs = require('fs');
 const storage = require('../services/storage');
 const crisis = require('../services/crisis');
 const openai = require('../services/openai');
-const elevenlabs = require('../services/elevenlabs');
 const gifts = require('../services/gifts');
 const memories = require('../services/memories');
 const wallet = require('../services/wallet');
+const tts = require('../services/tts');
 const { generatePrompt, PROMPT_VERSION } = require('./characters');
 const config = require('../config');
 
@@ -80,7 +80,9 @@ function emphasizePauses(text) {
 async function ttsReply(character, reply) {
   if (!character.voiceId) return null;
   try {
-    const audioBuffer = await elevenlabs.textToSpeech(emphasizePauses(reply), character.voiceId);
+    const audioBuffer = await tts.synthesize(
+      emphasizePauses(reply), character.voiceId, { dialect: character.dialect }
+    );
     const audioFile = `audio_${Date.now()}.mp3`;
     const audioPath = path.join(__dirname, '..', '..', 'public', 'uploads', audioFile);
     fs.writeFileSync(audioPath, audioBuffer);
