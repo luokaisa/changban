@@ -124,7 +124,7 @@ router.post('/:characterId/greet', async (req, res) => {
     const scoped = {
       ...character,
       systemPrompt: (character.systemPrompt || '') +
-        '\n【初见】这是你和用户的初次重逢。像家人久别重逢那样，温暖、克制，2-3句短句。可以轻轻唤用户一声。不要提系统，不要提你是AI。',
+        '\n【初见】这是你和用户的初次重逢。把压在心底的想念说出来：可以哽咽、可以欲言又止（用"…"表示停顿），轻轻唤用户一声。2-3句短句，真情实感，不要端着。不要提系统，不要提你是AI。',
     };
     const reply = await openai.chat(
       [{ role: 'user', content: '（初次见面）' }], scoped, llmOpts(req)
