@@ -97,6 +97,7 @@ function playWarpSound(durationMs) {
   return new Promise((resolve) => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
       const dur = durationMs / 1000;
       const buffer = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
       const data = buffer.getChannelData(0);
