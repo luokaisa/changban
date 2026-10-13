@@ -1056,3 +1056,37 @@ form { display: flex; flex-direction: column; gap: 16px; }
   color: var(--text-dim);
   margin-top: 4px;
 }
+
+/* ===== 支付 ===== */
+.pay-item {
+  text-align: center;
+  padding: 12px 0 16px;
+}
+.pay-item-name { font-size: 15px; margin: 6px 0; }
+.pay-amount {
+  font-size: 34px;
+  font-weight: 700;
+  margin: 8px 0;
+}
+.wechat-pay-btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 12px;
+  background: #07c160;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.wechat-pay-btn:active { background: #06ad56; }
+.wx-icon { font-size: 20px; }
+.gift-price {
+  font-size: 13px;
+  color: #f59e0b;
+  font-weight: 600;
+}

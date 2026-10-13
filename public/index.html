@@ -201,8 +201,19 @@
           <strong>🕯️ 寄一份心意</strong>
           <button class="icon-btn" onclick="closeGiftSheet()">✕</button>
         </div>
-        <p class="hint" style="margin-bottom:12px">送一份心意，TA 会真心回应你 · 内测期间免费</p>
+        <p class="hint" style="margin-bottom:12px" id="giftHint">送一份心意，TA 会真心回应你</p>
         <div id="giftGrid" class="gift-grid"></div>
+      </div>
+    </div>
+
+    <!-- 支付确认面板 -->
+    <div id="paySheet" class="gift-sheet" style="display:none">
+      <div class="gift-sheet-card">
+        <div class="gift-sheet-head">
+          <strong>确认支付</strong>
+          <button class="icon-btn" onclick="closePaySheet()">✕</button>
+        </div>
+        <div id="payBody"></div>
       </div>
     </div>
 

@@ -603,22 +603,33 @@ function cycleFontSize() {
 
 // ===== 寄心意 =====
 let giftCache = null;
+let giftPayEnabled = false;
+
+function fmtPrice(fen) {
+  return '¥' + (fen / 100).toFixed(fen % 100 === 0 ? 0 : 2);
+}
 
 async function openGiftSheet() {
   if (!currentCharId) return toast('请先选择角色');
   document.getElementById('giftSheet').style.display = 'flex';
   var grid = document.getElementById('giftGrid');
-  if (!giftCache) {
-    try {
-      giftCache = await api('/api/chat/gifts');
-    } catch (err) { grid.innerHTML = '<p class="hint">加载失败</p>'; return; }
-  }
+  try {
+    var data = await api('/api/chat/gifts');
+    giftPayEnabled = !!data.payEnabled;
+    giftCache = data.list;
+  } catch (err) { grid.innerHTML = '<p class="hint">加载失败</p>'; return; }
+  document.getElementById('giftHint').textContent =
+    giftPayEnabled ? '送一份心意，TA 会真心回应你' : '送一份心意，TA 会真心回应你 · 内测期间免费';
   grid.innerHTML = giftCache.map(function(g) {
+    var tag = (giftPayEnabled && g.price > 0)
+      ? '<div class="gift-price">' + fmtPrice(g.price) + '</div>'
+      : '<div class="gift-points">免费 · +' + g.points + ' 记忆点</div>';
     return '<div class="gift-item" onclick="sendGift(\'' + g.id + '\')">' +
       '<div class="gift-emoji">' + g.emoji + '</div>' +
-      '<div class="gift-name">' + g.name + '</div>' +
-      '<div class="gift-points">+' + g.points + ' 记忆点</div></div>';
+      '<div class="gift-name">' + g.name + '</div>' + tag + '</div>';
   }).join('');
+  // 从微信支付回跳：检查未完成的订单
+  resumePendingOrder();
 }
 
 function closeGiftSheet() {
@@ -626,7 +637,18 @@ function closeGiftSheet() {
 }
 
 async function sendGift(giftId) {
+  var g = (giftCache || []).find(function(x) { return x.id === giftId; });
+  if (!g) return;
+  if (giftPayEnabled && g.price > 0) {
+    openPaySheet(g);
+    return;
+  }
   closeGiftSheet();
+  doDeliverGift(giftId, null);
+}
+
+// 实际发货（免费直发 / 凭已付订单发货）
+async function doDeliverGift(giftId, orderId) {
   var g = (giftCache || []).find(function(x) { return x.id === giftId; });
   addGiftMessage(g);
   var msgs = document.getElementById('chatMessages');
@@ -637,18 +659,102 @@ async function sendGift(giftId) {
   msgs.appendChild(typing);
   msgs.scrollTop = msgs.scrollHeight;
   try {
+    var body = { giftId: giftId };
+    if (orderId) body.orderId = orderId;
     var res = await api('/api/chat/' + currentCharId + '/gift', {
       method: 'POST',
-      body: JSON.stringify({ giftId: giftId }),
+      body: JSON.stringify(body),
     });
+    if (res.needPay) { // 订单失效，回支付面板
+      var t = document.getElementById('typing-indicator');
+      if (t) t.remove();
+      openPaySheet(g);
+      return;
+    }
     document.getElementById('typing-indicator').remove();
     addMessage('ai', res.reply, res.audioUrl || null, false);
     toast('🕯️ +' + res.pointsEarned + ' 记忆点 · ' + res.milestone);
   } catch (err) {
-    var t = document.getElementById('typing-indicator');
-    if (t) t.remove();
+    var t2 = document.getElementById('typing-indicator');
+    if (t2) t2.remove();
     toast('❌ ' + err.message);
   }
+}
+
+// ===== 微信支付 =====
+function openPaySheet(g) {
+  closeGiftSheet();
+  document.getElementById('paySheet').style.display = 'flex';
+  document.getElementById('payBody').innerHTML =
+    '<div class="pay-item"><div class="gift-emoji">' + g.emoji + '</div>' +
+    '<div class="pay-item-name">寄心意 · ' + g.name + '</div>' +
+    '<div class="pay-amount">' + fmtPrice(g.price) + '</div></div>' +
+    '<button class="wechat-pay-btn" onclick="payForGift(\'' + g.id + '\')">' +
+    '<span class="wx-icon">💬</span> 微信支付 ' + fmtPrice(g.price) + '</button>' +
+    '<p class="hint" style="text-align:center;margin-top:10px">支付完成后心意自动送达</p>';
+}
+
+function closePaySheet() {
+  document.getElementById('paySheet').style.display = 'none';
+}
+
+async function payForGift(giftId) {
+  try {
+    var res = await api('/api/pay/create', {
+      method: 'POST',
+      body: JSON.stringify({ characterId: currentCharId, giftId: giftId }),
+    });
+    if (res.mock) {
+      // 测试模式：应用内模拟支付
+      document.getElementById('payBody').innerHTML =
+        '<div class="pay-item"><p class="hint">🧪 测试模式（未接微信商户号）</p>' +
+        '<div class="pay-amount">' + fmtPrice(res.amount) + '</div></div>' +
+        '<button class="wechat-pay-btn" onclick="mockConfirmPay(\'' + res.orderId + '\',\'' + giftId + '\')">确认支付（模拟）</button>';
+    } else {
+      // 真钱：跳微信 H5 支付，回跳后补发
+      sessionStorage.setItem('pendingOrder', JSON.stringify({
+        orderId: res.orderId, giftId: giftId, characterId: currentCharId,
+      }));
+      location.href = res.h5_url;
+    }
+  } catch (err) {
+    toast('❌ ' + err.message);
+  }
+}
+
+async function mockConfirmPay(orderId, giftId) {
+  try {
+    await api('/api/pay/mock-confirm', {
+      method: 'POST',
+      body: JSON.stringify({ orderId: orderId }),
+    });
+    closePaySheet();
+    doDeliverGift(giftId, orderId);
+  } catch (err) {
+    toast('❌ ' + err.message);
+  }
+}
+
+// 从微信支付回跳后：订单已付则补发货
+async function resumePendingOrder() {
+  var raw = null;
+  try { raw = sessionStorage.getItem('pendingOrder'); } catch (e) {}
+  if (!raw) return;
+  var p = JSON.parse(raw);
+  if (p.characterId !== currentCharId) return;
+  try {
+    var st = await api('/api/pay/status/' + p.orderId);
+    if (st.status === 'paid') {
+      sessionStorage.removeItem('pendingOrder');
+      closeGiftSheet();
+      doDeliverGift(p.giftId, p.orderId);
+    } else if (st.status === 'pending') {
+      toast('订单待支付，可重新发起');
+      sessionStorage.removeItem('pendingOrder');
+    } else {
+      sessionStorage.removeItem('pendingOrder');
+    }
+  } catch (err) { /* 忽略 */ }
 }
 
 // 心意消息气泡（特殊样式）

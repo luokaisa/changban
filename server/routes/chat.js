@@ -64,7 +64,7 @@ function getKey(userId, characterId) {
 
 /** 心意目录（必须在 /:characterId 之前定义） */
 router.get('/gifts', (req, res) => {
-  res.json(gifts.listGifts());
+  res.json({ payEnabled: giftPayEnabled(), list: gifts.listGifts() });
 });
 
 /** TTS 合成回复语音（复用） */
@@ -92,10 +92,47 @@ function llmOpts(req) {
   };
 }
 
-/** 寄心意 → 专属回应 + 语音 + 记点 */
+const giftPayEnabled = () => process.env.GIFTS_PAY_ENABLED === 'true';
+
+/** 发货：心意消息落库 → 专属回应 → 语音 → 记点 */
+async function deliverGift(userId, characterId, character, gift, chars, req) {
+  const giftMsg = `送给你：${gift.emoji}${gift.name}`;
+  addMessage(userId, characterId, 'user', giftMsg);
+
+  // 专属回应：人设 + 心意场景（不污染原 systemPrompt）
+  const scoped = {
+    ...character,
+    systemPrompt: (character.systemPrompt || '') + '\n【寄心意】' + gift.scene,
+  };
+  const history = getHistory(userId, characterId);
+  const reply = await openai.chat(history, scoped, llmOpts(req));
+  addMessage(userId, characterId, 'assistant', reply);
+
+  const audioUrl = await ttsReply(character, reply);
+
+  // 记点 + 完整度
+  const totalPoints = memories.addPoints(character, {
+    type: 'gift', points: gift.points, label: `${gift.emoji}${gift.name}`,
+  });
+  storage.write('characters', chars);
+  const comp = memories.completeness(character);
+
+  return {
+    reply,
+    audioUrl,
+    gift: { id: gift.id, name: gift.name, emoji: gift.emoji },
+    pointsEarned: gift.points,
+    totalPoints,
+    completeness: comp.percent,
+    milestone: memories.milestone(comp.percent),
+    character: { name: character.name, avatar: character.avatar },
+  };
+}
+
+/** 寄心意 → （付费心意验单） → 专属回应 + 语音 + 记点 */
 router.post('/:characterId/gift', async (req, res) => {
   try {
-    const { giftId } = req.body;
+    const { giftId, orderId } = req.body;
     const gift = gifts.getGift(giftId);
     if (!gift) return res.status(400).json({ error: '心意不存在' });
 
@@ -104,38 +141,34 @@ router.post('/:characterId/gift', async (req, res) => {
     if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
     if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
 
-    const userId = req.user.userId;
-    const giftMsg = `送给你：${gift.emoji}${gift.name}`;
-    addMessage(userId, req.params.characterId, 'user', giftMsg);
+    // 付费心意：必须持有已支付且未消费的订单（防重放）
+    let paidOrder = null;
+    if (giftPayEnabled() && gift.price > 0) {
+      const orders = storage.read('orders');
+      const order = orderId && orders[orderId];
+      const valid = order &&
+        order.userId === req.user.userId &&
+        order.characterId === req.params.characterId &&
+        order.giftId === gift.id &&
+        order.amount === gift.price &&
+        order.status === 'paid';
+      if (!valid) {
+        return res.status(402).json({
+          needPay: true,
+          gift: { id: gift.id, name: gift.name, emoji: gift.emoji, price: gift.price },
+        });
+      }
+      paidOrder = { orders, order };
+    }
 
-    // 专属回应：人设 + 心意场景（不污染原 systemPrompt）
-    const scoped = {
-      ...character,
-      systemPrompt: (character.systemPrompt || '') + '\n【寄心意】' + gift.scene,
-    };
-    const history = getHistory(userId, req.params.characterId);
-    const reply = await openai.chat(history, scoped, llmOpts(req));
-    addMessage(userId, req.params.characterId, 'assistant', reply);
+    const result = await deliverGift(req.user.userId, req.params.characterId, character, gift, chars, req);
 
-    const audioUrl = await ttsReply(character, reply);
-
-    // 记点 + 完整度
-    const totalPoints = memories.addPoints(character, {
-      type: 'gift', points: gift.points, label: `${gift.emoji}${gift.name}`,
-    });
-    storage.write('characters', chars);
-    const comp = memories.completeness(character);
-
-    res.json({
-      reply,
-      audioUrl,
-      gift: { id: gift.id, name: gift.name, emoji: gift.emoji },
-      pointsEarned: gift.points,
-      totalPoints,
-      completeness: comp.percent,
-      milestone: memories.milestone(comp.percent),
-      character: { name: character.name, avatar: character.avatar },
-    });
+    // 发货成功后才核销订单（失败则订单保持 paid，可重试）
+    if (paidOrder) {
+      paidOrder.order.status = 'consumed'; // 一单一发
+      storage.write('orders', paidOrder.orders);
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
