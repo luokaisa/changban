@@ -189,9 +189,22 @@
       <div class="chat-input-area">
         <button id="voiceInputBtn" class="icon-btn voice-btn" onclick="startVoiceInput()">🎤</button>
         <input type="text" id="chatInput" placeholder="说点什么…" onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="icon-btn gift-btn" onclick="openGiftSheet()" title="寄心意">🎁</button>
         <button class="send-btn" onclick="sendMessage()">发送</button>
       </div>
     </main>
+
+    <!-- 寄心意面板 -->
+    <div id="giftSheet" class="gift-sheet" style="display:none">
+      <div class="gift-sheet-card">
+        <div class="gift-sheet-head">
+          <strong>🕯️ 寄一份心意</strong>
+          <button class="icon-btn" onclick="closeGiftSheet()">✕</button>
+        </div>
+        <p class="hint" style="margin-bottom:12px">送一份心意，TA 会真心回应你 · 内测期间免费</p>
+        <div id="giftGrid" class="gift-grid"></div>
+      </div>
+    </div>
 
     <!-- === 设置 === -->
     <main id="page-settings" class="page">

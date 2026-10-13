@@ -166,7 +166,9 @@ async function loadCharacters() {
     list.innerHTML = chars.map(function(c) {
       return '<div class=\"char-card\" onclick=\"navigate(\'chat\',\'' + c.id + '\')\">' +
         (c.hasAvatar ? '<img src=\"/api/avatar/' + c.id + '\" class=\"char-card-avatar\" onerror=\"this.style.display=\'none\'\">' : '<div class=\"char-card-avatar placeholder\">\uD83D\uDD4A\uFE0F</div>') +
-        '<div class=\"char-card-info\"><h3>' + c.name + ' <span class=\"ai-tag\">AI</span></h3><p>' + (c.relationship || '') + '</p></div>' +
+        '<div class=\"char-card-info\"><h3>' + c.name + ' <span class=\"ai-tag\">AI</span></h3><p>' + (c.relationship || '') + '</p>' +
+        '<div class=\"mem-progress\"><div class=\"mem-fill\" style=\"width:' + (c.completeness || 0) + '%\"></div></div>' +
+        '<div class=\"mem-label\">🕯️ 回忆完整度 ' + (c.completeness || 0) + '% · ' + (c.memoryPoints || 0) + ' 记忆点</div></div>' +
         '<span class=\"char-card-arrow\" onclick=\"event.stopPropagation();navigate(\'edit\',\'' + c.id + '\')\">\u270F\uFE0F</span></div>';
     }).join('');
   } catch (err) {
@@ -597,6 +599,72 @@ function cycleFontSize() {
   localStorage.setItem('chat_fs', String(idx));
   applyFontSize();
   toast('🅰️ ' + FONT_NAMES[idx]);
+}
+
+// ===== 寄心意 =====
+let giftCache = null;
+
+async function openGiftSheet() {
+  if (!currentCharId) return toast('请先选择角色');
+  document.getElementById('giftSheet').style.display = 'flex';
+  var grid = document.getElementById('giftGrid');
+  if (!giftCache) {
+    try {
+      giftCache = await api('/api/chat/gifts');
+    } catch (err) { grid.innerHTML = '<p class="hint">加载失败</p>'; return; }
+  }
+  grid.innerHTML = giftCache.map(function(g) {
+    return '<div class="gift-item" onclick="sendGift(\'' + g.id + '\')">' +
+      '<div class="gift-emoji">' + g.emoji + '</div>' +
+      '<div class="gift-name">' + g.name + '</div>' +
+      '<div class="gift-points">+' + g.points + ' 记忆点</div></div>';
+  }).join('');
+}
+
+function closeGiftSheet() {
+  document.getElementById('giftSheet').style.display = 'none';
+}
+
+async function sendGift(giftId) {
+  closeGiftSheet();
+  var g = (giftCache || []).find(function(x) { return x.id === giftId; });
+  addGiftMessage(g);
+  var msgs = document.getElementById('chatMessages');
+  var typing = document.createElement('div');
+  typing.className = 'typing';
+  typing.id = 'typing-indicator';
+  typing.innerHTML = '<span></span><span></span><span></span>';
+  msgs.appendChild(typing);
+  msgs.scrollTop = msgs.scrollHeight;
+  try {
+    var res = await api('/api/chat/' + currentCharId + '/gift', {
+      method: 'POST',
+      body: JSON.stringify({ giftId: giftId }),
+    });
+    document.getElementById('typing-indicator').remove();
+    addMessage('ai', res.reply, res.audioUrl || null, false);
+    toast('🕯️ +' + res.pointsEarned + ' 记忆点 · ' + res.milestone);
+  } catch (err) {
+    var t = document.getElementById('typing-indicator');
+    if (t) t.remove();
+    toast('❌ ' + err.message);
+  }
+}
+
+// 心意消息气泡（特殊样式）
+function addGiftMessage(g) {
+  var msgs = document.getElementById('chatMessages');
+  var wrapper = document.createElement('div');
+  wrapper.className = 'msg-row user';
+  var bubble = document.createElement('div');
+  bubble.className = 'msg-bubble gift-bubble';
+  var time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  bubble.innerHTML = '<div class="gift-big">' + (g ? g.emoji : '🎁') + '</div>' +
+    '<div>寄出心意 · ' + (g ? g.name : '') + '</div>' +
+    '<span class="time">' + time + '</span>';
+  wrapper.appendChild(bubble);
+  msgs.appendChild(wrapper);
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 function playAudio(url) {

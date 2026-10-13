@@ -978,3 +978,81 @@ form { display: flex; flex-direction: column; gap: 16px; }
 .chat-messages.fs-3 .msg-bubble { font-size: 19px; }
 .chat-messages.fs-2 .msg-bubble .time,
 .chat-messages.fs-3 .msg-bubble .time { font-size: 12px; }
+
+/* ===== 寄心意 ===== */
+.gift-btn { font-size: 20px; }
+.gift-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.gift-sheet-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg2);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 18px 28px;
+  animation: toastIn 0.25s ease-out;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.gift-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+.gift-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.gift-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 6px 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.gift-item:active {
+  transform: scale(0.95);
+  border-color: var(--warm);
+}
+.gift-emoji { font-size: 34px; margin-bottom: 6px; }
+.gift-name { font-size: 13px; margin-bottom: 2px; }
+.gift-points { font-size: 11px; color: var(--warm); }
+/* 心意消息气泡 */
+.msg-bubble.gift-bubble {
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.45);
+  border-bottom-right-radius: 4px;
+  text-align: center;
+  min-width: 110px;
+}
+.gift-big { font-size: 40px; margin-bottom: 4px; }
+/* 回忆完整度进度条 */
+.mem-progress {
+  height: 5px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.mem-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #ec4899);
+  border-radius: 3px;
+  transition: width 0.5s;
+}
+.mem-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}

@@ -1,22 +1,42 @@
 const express = require('express');
 const router = express.Router();
 const storage = require('../services/storage');
+const memories = require('../services/memories');
 const { v4: uuidv4 } = require('uuid');
 
-/** 获取当前用户的角色列表 */
+/** 获取当前用户的角色列表（含记忆点/完整度） */
 router.get('/', (req, res) => {
   const chars = storage.read('characters');
   const list = Object.entries(chars)
     .filter(([_, c]) => c.userId === req.user.userId)
-    .map(([id, c]) => ({
-      id,
-      name: c.name,
-      relationship: c.relationship || '',
-      voiceId: c.voiceId || '',
-      hasAvatar: !!c.avatar,
-      createdAt: c.createdAt,
-    }));
+    .map(([id, c]) => {
+      const comp = memories.completeness(c);
+      return {
+        id,
+        name: c.name,
+        relationship: c.relationship || '',
+        voiceId: c.voiceId || '',
+        hasAvatar: !!c.avatar,
+        memoryPoints: comp.points,
+        completeness: comp.percent,
+        createdAt: c.createdAt,
+      };
+    });
   res.json(list);
+});
+
+/** 回忆档案详情：完整度 + 记忆点明细 */
+router.get('/:id/memories', (req, res) => {
+  const chars = storage.read('characters');
+  const char = chars[req.params.id];
+  if (!char) return res.status(404).json({ error: '角色不存在' });
+  if (char.userId !== req.user.userId) return res.status(403).json({ error: '无权访问该角色' });
+  const comp = memories.completeness(char);
+  res.json({
+    ...comp,
+    milestone: memories.milestone(comp.percent),
+    log: memories.getLog(char).slice(-50).reverse(),
+  });
 });
 
 /** 获取单个角色（仅限当前用户） */
