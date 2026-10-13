@@ -155,6 +155,14 @@ async function api(path, opts) {
 }
 
 // ===== 首页：角色列表 =====
+// 打开角色：首次走初见仪式，之后直进对话
+function openCharacter(id) {
+  let seen = false;
+  try { seen = !!localStorage.getItem('ritual_seen_' + id); } catch (e) {}
+  if (seen || typeof startMeetingRitual !== 'function') navigate('chat', id);
+  else startMeetingRitual(id);
+}
+
 async function loadCharacters() {
   var list = document.getElementById('charList');
   try {
@@ -164,7 +172,7 @@ async function loadCharacters() {
       return;
     }
     list.innerHTML = chars.map(function(c) {
-      return '<div class=\"char-card\" onclick=\"navigate(\'chat\',\'' + c.id + '\')\">' +
+      return '<div class=\"char-card\" onclick=\"openCharacter(\'' + c.id + '\')\">' +
         (c.hasAvatar ? '<img src=\"/api/avatar/' + c.id + '\" class=\"char-card-avatar\" onerror=\"this.style.display=\'none\'\">' : '<div class=\"char-card-avatar placeholder\">\uD83D\uDD4A\uFE0F</div>') +
         '<div class=\"char-card-info\"><h3>' + c.name + ' <span class=\"ai-tag\">AI</span></h3><p>' + (c.relationship || '') + '</p>' +
         '<div class=\"mem-progress\"><div class=\"mem-fill\" style=\"width:' + (c.completeness || 0) + '%\"></div></div>' +
@@ -250,6 +258,8 @@ async function loadEditForm(id) {
     if (char.avatar) { av.src = char.avatar; av.style.display = 'block'; }
     else { av.style.display = 'none'; }
     document.getElementById('voiceStatus').textContent = char.voiceId ? '\u2705 \u5DF2\u8BBE\u7F6E\u58F0\u97F3' : '\u672A\u8BBE\u7F6E\u58F0\u97F3';
+    document.getElementById('meetingRitualBtn').onclick = function() { startMeetingRitual(id); };
+    document.getElementById('farewellRitualBtn').onclick = function() { startFarewellRitual(id); };
   } catch (err) { toast('\u274C ' + err.message); navigate('home'); }
 }
 

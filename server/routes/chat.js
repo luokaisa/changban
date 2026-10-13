@@ -95,6 +95,53 @@ function llmOpts(req) {
 
 const giftPayEnabled = () => process.env.GIFTS_PAY_ENABLED === 'true';
 
+/** 初见问候：穿越后 TA 的第一句话（含语音），记为对话首条 */
+router.post('/:characterId/greet', async (req, res) => {
+  try {
+    const chars = storage.read('characters');
+    const character = chars[req.params.characterId];
+    if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
+    if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
+
+    const scoped = {
+      ...character,
+      systemPrompt: (character.systemPrompt || '') +
+        '\n【初见】这是你和用户的初次重逢。像家人久别重逢那样，温暖、克制，2-3句短句。可以轻轻唤用户一声。不要提系统，不要提你是AI。',
+    };
+    const reply = await openai.chat(
+      [{ role: 'user', content: '（初次见面）' }], scoped, llmOpts(req)
+    );
+    addMessage(req.user.userId, req.params.characterId, 'assistant', reply);
+    const audioUrl = await ttsReply(character, reply);
+    res.json({ reply, audioUrl, character: { name: character.name, avatar: character.avatar } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** 告别语：回到现实前 TA 的最后一句话（含语音） */
+router.post('/:characterId/farewell', async (req, res) => {
+  try {
+    const chars = storage.read('characters');
+    const character = chars[req.params.characterId];
+    if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
+    if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
+
+    const scoped = {
+      ...character,
+      systemPrompt: (character.systemPrompt || '') +
+        '\n【告别】这是分别的时刻。温暖、释然，告诉用户你会一直在TA心里，叮嘱TA好好吃饭、好好生活，2-3句短句。不要提系统，不要提你是AI。',
+    };
+    const history = getHistory(req.user.userId, req.params.characterId);
+    const reply = await openai.chat(history, scoped, llmOpts(req));
+    addMessage(req.user.userId, req.params.characterId, 'assistant', reply);
+    const audioUrl = await ttsReply(character, reply);
+    res.json({ reply, audioUrl, character: { name: character.name, avatar: character.avatar } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** 发货：心意消息落库 → 专属回应 → 语音 → 记点 */
 async function deliverGift(userId, characterId, character, gift, chars, req) {
   const giftMsg = `送给你：${gift.emoji}${gift.name}`;
