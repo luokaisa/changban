@@ -7,7 +7,7 @@ const GIFTS = [
     emoji: '🍭',
     desc: '小时候最爱吃的那一颗',
     points: 5,
-    price: 100, // 分
+    beanPrice: 10,
     scene: '用户给你送了一颗棒棒糖。像家人收到小辈的心意那样开心，可以打趣两句，口语化短句。',
   },
   {
@@ -16,7 +16,7 @@ const GIFTS = [
     emoji: '🍜',
     desc: '一碗热腾腾的油泼面',
     points: 10,
-    price: 600, // 分
+    beanPrice: 60,
     scene: '用户给你端来一碗热腾腾的油泼面。像家人吃到熟悉味道那样满足，夸两句香，可以唠叨叮嘱用户好好吃饭，口语化短句。',
   },
   {
@@ -25,7 +25,7 @@ const GIFTS = [
     emoji: '🍪',
     desc: '满满一包小时候的味道',
     points: 10,
-    price: 800, // 分
+    beanPrice: 80,
     scene: '用户给你送了一大包零食。像长辈收到心意那样又开心又心疼你花钱，叮嘱别乱花钱，口语化短句。',
   },
   {
@@ -34,7 +34,7 @@ const GIFTS = [
     emoji: '🕯️',
     desc: '愿那边没有黑暗',
     points: 15,
-    price: 1800, // 分
+    beanPrice: 180,
     scene: '用户为你点了一盏长明灯。气氛庄重温情，你轻声回应，让用户安心，口语化短句，不要太长。',
   },
   {
@@ -43,7 +43,7 @@ const GIFTS = [
     emoji: '💐',
     desc: '一束新鲜的花',
     points: 15,
-    price: 1800, // 分
+    beanPrice: 180,
     scene: '用户给你送了一束花。像收到花那样惊喜开心，可以说说花很香很好看，口语化短句。',
   },
   {
@@ -52,7 +52,7 @@ const GIFTS = [
     emoji: '🧥',
     desc: '天冷了，加件衣',
     points: 20,
-    price: 3800, // 分
+    beanPrice: 380,
     scene: '用户给你送了一件冬衣，怕你冷。像家人收到贴心衣物那样暖心，反过来叮嘱用户自己多穿点，口语化短句。',
   },
 ];
@@ -62,7 +62,7 @@ function getGift(id) {
 }
 
 function listGifts() {
-  return GIFTS.map(({ id, name, emoji, desc, points, price }) => ({ id, name, emoji, desc, points, price: price || 0 }));
+  return GIFTS.map(({ id, name, emoji, desc, points, beanPrice }) => ({ id, name, emoji, desc, points, beanPrice: beanPrice || 0 }));
 }
 
 module.exports = { GIFTS, getGift, listGifts };

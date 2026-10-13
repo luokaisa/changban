@@ -1090,3 +1090,47 @@ form { display: flex; flex-direction: column; gap: 16px; }
   color: #f59e0b;
   font-weight: 600;
 }
+
+/* ===== 心意豆 ===== */
+.bean-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+.recharge-link {
+  background: #07c160;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+.tier-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 8px;
+  text-align: center;
+  cursor: pointer;
+}
+.tier-item:active {
+  transform: scale(0.96);
+  border-color: #07c160;
+}
+.tier-beans { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.tier-cny { font-size: 14px; color: var(--text-dim); }
+.bean-big { font-size: 44px; margin-bottom: 6px; }

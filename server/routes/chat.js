@@ -8,6 +8,7 @@ const openai = require('../services/openai');
 const elevenlabs = require('../services/elevenlabs');
 const gifts = require('../services/gifts');
 const memories = require('../services/memories');
+const wallet = require('../services/wallet');
 const config = require('../config');
 
 const MAX_AUDIO_FILES = 50;      // TTS 回复音频最多保留份数
@@ -129,10 +130,10 @@ async function deliverGift(userId, characterId, character, gift, chars, req) {
   };
 }
 
-/** 寄心意 → （付费心意验单） → 专属回应 + 语音 + 记点 */
+/** 寄心意 → （付费心意扣豆） → 专属回应 + 语音 + 记点 */
 router.post('/:characterId/gift', async (req, res) => {
   try {
-    const { giftId, orderId } = req.body;
+    const { giftId } = req.body;
     const gift = gifts.getGift(giftId);
     if (!gift) return res.status(400).json({ error: '心意不存在' });
 
@@ -141,32 +142,26 @@ router.post('/:characterId/gift', async (req, res) => {
     if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
     if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
 
-    // 付费心意：必须持有已支付且未消费的订单（防重放）
-    let paidOrder = null;
-    if (giftPayEnabled() && gift.price > 0) {
-      const orders = storage.read('orders');
-      const order = orderId && orders[orderId];
-      const valid = order &&
-        order.userId === req.user.userId &&
-        order.characterId === req.params.characterId &&
-        order.giftId === gift.id &&
-        order.amount === gift.price &&
-        order.status === 'paid';
-      if (!valid) {
+    // 付费心意：扣心意豆，余额不足引导充值（豆价以服务端目录为准）
+    let beanCost = 0;
+    if (giftPayEnabled() && gift.beanPrice > 0) {
+      beanCost = gift.beanPrice;
+      const balance = wallet.getBalance(req.user.userId);
+      if (balance < beanCost) {
         return res.status(402).json({
-          needPay: true,
-          gift: { id: gift.id, name: gift.name, emoji: gift.emoji, price: gift.price },
+          needRecharge: true,
+          balance,
+          gift: { id: gift.id, name: gift.name, emoji: gift.emoji, beanPrice: beanCost },
         });
       }
-      paidOrder = { orders, order };
     }
 
     const result = await deliverGift(req.user.userId, req.params.characterId, character, gift, chars, req);
 
-    // 发货成功后才核销订单（失败则订单保持 paid，可重试）
-    if (paidOrder) {
-      paidOrder.order.status = 'consumed'; // 一单一发
-      storage.write('orders', paidOrder.orders);
+    // 发货成功后才扣豆（失败不扣，可重试）
+    if (beanCost > 0) {
+      const balance = wallet.spendBeans(req.user.userId, beanCost, `寄心意:${gift.name}`);
+      result.beanBalance = balance;
     }
     res.json(result);
   } catch (err) {
