@@ -82,10 +82,11 @@ router.post('/phone-login', async (req, res) => {
       const role = auth.hasAnyUser() ? 'user' : 'admin';
       const created = auth.createUser(username, phone.slice(-6), role);
       if (!created) return res.status(500).json({ error: '注册失败' });
-      // 保存手机号
+      // 保存手机号（一键登录自动注册的账号记为未实名，需在设置页补认证）
       const u = storage.read('users');
       if (u[username]) {
         u[username].phone = phone;
+        u[username].verified = false;
         storage.write('users', u);
       }
       user = { id: u[username].id, username, role };
@@ -166,20 +167,87 @@ router.post('/verify-code', (req, res) => {
   res.json({ verified: true, verifyToken, existing: false });
 });
 
+// ===== 合规：实名认证（新用户注册流程，凭 verifyToken） =====
+const idverify = require('../services/idverify');
+
+router.post('/verify-id', async (req, res) => {
+  const { verifyToken, realName, idcard } = req.body;
+  if (!verifyToken || !realName || !idcard) return res.status(400).json({ error: '参数不完整' });
+
+  const vf = path.join(__dirname, '..', '..', 'data', 'verify-tokens.json');
+  let tokens = {};
+  try { tokens = JSON.parse(fs.readFileSync(vf, 'utf8')); } catch(e) {}
+  const record = tokens[verifyToken];
+  if (!record) return res.status(400).json({ error: '验证已过期，请重新获取验证码' });
+  if (Date.now() > record.expiresAt) {
+    delete tokens[verifyToken];
+    fs.writeFileSync(vf, JSON.stringify(tokens, null, 2));
+    return res.status(400).json({ error: '验证已过期，请重新获取验证码' });
+  }
+
+  const result = await idverify.verify(realName, idcard);
+  if (!result.ok) return res.status(400).json({ error: result.message });
+
+  // 实名通过：身份证号原文不落盘，只存脱敏号 + 哈希 + 证件解析出的出生日期
+  const id = idcard.trim().toUpperCase();
+  record.idVerified = true;
+  record.realName = realName.trim();
+  record.idMasked = idverify.maskId(id);
+  record.idHash = idverify.hashId(id);
+  record.birthdate = result.birthdate || '';
+  record.idVerifiedAt = Date.now();
+  fs.writeFileSync(vf, JSON.stringify(tokens, null, 2));
+
+  res.json({ success: true, birthdate: record.birthdate });
+});
+
+// ===== 合规：实名认证（已登录老用户补认证，含一键登录自动注册的账号） =====
+router.post('/verify-id/me', async (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).json({ error: '未登录' });
+  const session = auth.verifyToken(token);
+  if (!session) return res.status(401).json({ error: '登录已过期' });
+
+  const { realName, idcard } = req.body;
+  if (!realName || !idcard) return res.status(400).json({ error: '参数不完整' });
+
+  const result = await idverify.verify(realName, idcard);
+  if (!result.ok) return res.status(400).json({ error: result.message });
+
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  const user = users[session.username];
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+
+  const id = idcard.trim().toUpperCase();
+  user.verified = true;
+  user.realName = realName.trim();
+  user.idMasked = idverify.maskId(id);
+  user.idHash = idverify.hashId(id);
+  user.idVerifiedAt = Date.now();
+  if (result.birthdate) user.birthdate = result.birthdate; // 证件年龄为准
+  storage.write('users', users);
+
+  res.json({ success: true });
+});
+
 // ===== 手机号验证后注册（设置用户名+密码） =====
 router.post('/register-by-phone', (req, res) => {
   const { verifyToken, username, password, birthdate } = req.body;
   if (!verifyToken || !username || !password) return res.status(400).json({ error: '参数不完整' });
   if (password.length < 4) return res.status(400).json({ error: '密码至少4位' });
   if (username.length < 2) return res.status(400).json({ error: '用户名至少2个字符' });
-  if (!isAdult(birthdate)) return res.status(403).json({ error: '根据法规要求，本服务仅向年满18岁的用户提供' });
-  
-  // 验证令牌
+
+  // 合规：必须先完成实名认证；年龄以证件解析为准
   const vf = path.join(__dirname, '..', '..', 'data', 'verify-tokens.json');
   let tokens = {};
   try { tokens = JSON.parse(fs.readFileSync(vf, 'utf8')); } catch(e) {}
   const record = tokens[verifyToken];
-  if (!record) return res.status(400).json({ error: '验证已过期，请重新获取验证码' });
+  if (!record || !record.idVerified) return res.status(403).json({ error: '请先完成实名认证' });
+  const realBirthdate = record.birthdate || birthdate;
+  if (!isAdult(realBirthdate)) return res.status(403).json({ error: '根据法规要求，本服务仅向年满18岁的用户提供' });
+
+  // 验证令牌（上文已读 record，此处只做过期检查）
   if (Date.now() > record.expiresAt) {
     delete tokens[verifyToken];
     fs.writeFileSync(vf, JSON.stringify(tokens, null, 2));
@@ -194,12 +262,17 @@ router.post('/register-by-phone', (req, res) => {
   const created = auth.createUser(username, password, role);
   if (!created) return res.status(409).json({ error: '用户名已存在' });
   
-  // 保存手机号与出生日期（合规留存）
+  // 保存手机号、出生日期与实名信息（身份证号原文不落盘）
   const storage = require('../services/storage');
   const users = storage.read('users');
   if (users[username]) {
     users[username].phone = record.phone;
-    users[username].birthdate = birthdate;
+    users[username].birthdate = realBirthdate;
+    users[username].verified = true;
+    users[username].realName = record.realName;
+    users[username].idMasked = record.idMasked;
+    users[username].idHash = record.idHash;
+    users[username].idVerifiedAt = record.idVerifiedAt;
     storage.write('users', users);
   }
   
@@ -305,7 +378,9 @@ router.get('/me', (req, res) => {
   if (!token) return res.status(401).json({ error: '未登录' });
   const session = auth.verifyToken(token);
   if (!session) return res.status(401).json({ error: '登录已过期' });
-  res.json({ user: { id: session.userId, username: session.username, role: session.role } });
+  const storage = require('../services/storage');
+  const u = storage.read('users')[session.username] || {};
+  res.json({ user: { id: session.userId, username: session.username, role: session.role, verified: u.verified === true, realName: u.realName || '' } });
 });
 
 // ===== 合规：导出个人数据 =====
@@ -330,7 +405,7 @@ router.get('/export', (req, res) => {
 
   res.json({
     exportedAt: new Date().toISOString(),
-    user: user ? { username: session.username, phone: user.phone || '', birthdate: user.birthdate || '', role: user.role, createdAt: user.createdAt } : null,
+    user: user ? { username: session.username, phone: user.phone || '', birthdate: user.birthdate || '', role: user.role, createdAt: user.createdAt, verified: user.verified === true, realName: user.realName || '', idMasked: user.idMasked || '', idVerifiedAt: user.idVerifiedAt || null } : null,
     characters: myChars,
     conversations: myConv,
   });

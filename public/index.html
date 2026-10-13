@@ -238,6 +238,19 @@
       </div>
 
       <div class="settings-section">
+        <h3>🪪 实名认证</h3>
+        <p class="hint" id="verifyStatus">未实名：创建角色与克隆声音需要先完成实名认证</p>
+        <div class="form-group">
+          <input type="text" id="verifyRealName" placeholder="真实姓名" maxlength="10">
+        </div>
+        <div class="form-group">
+          <input type="text" id="verifyIdcard" placeholder="身份证号" maxlength="18" inputmode="numeric">
+        </div>
+        <button class="btn-primary" onclick="verifyIdMe()" style="width:100%">提交认证</button>
+        <p class="hint" style="margin-top:8px">仅用于实名核验，身份证号原文不会被存储</p>
+      </div>
+
+      <div class="settings-section">
         <h3>🗂️ 我的数据</h3>
         <button class="btn-secondary" onclick="exportMyData()" style="width:100%;margin-bottom:8px">📥 导出我的数据（JSON）</button>
         <button class="btn-danger" onclick="deleteMyAccount()" style="width:100%">🗑️ 删除账号及全部数据</button>

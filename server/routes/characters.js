@@ -28,10 +28,16 @@ router.get('/:id', (req, res) => {
   res.json({ id: req.params.id, ...char });
 });
 
-/** 创建角色（绑定到当前用户；需逝者授权声明） */
+/** 创建角色（绑定到当前用户；需实名认证 + 逝者授权声明） */
 router.post('/', (req, res) => {
   const { name, relationship, personality, memories } = req.body;
   if (!name) return res.status(400).json({ error: '请填写角色姓名' });
+  // 合规：未实名用户不得创建 AI 纪念角色（含老账号、一键登录自动注册账号）
+  const users = storage.read('users');
+  const me = users[req.user.username];
+  if (!me || me.verified !== true) {
+    return res.status(403).json({ error: '请先完成实名认证', needVerify: true });
+  }
   // 合规：创建 AI 纪念角色须确认已获得逝者生前意愿或全体近亲属一致书面同意
   if (req.body.consent !== true) {
     return res.status(403).json({ error: '请先确认逝者授权声明' });

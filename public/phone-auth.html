@@ -41,9 +41,16 @@ a{display:block;margin-top:16px;color:#64748b;font-size:13px;text-decoration:non
     <input id="regUser" type="text" maxlength="20" placeholder="用户名" autocomplete="username">
     <input id="regPass" type="password" maxlength="30" placeholder="密码" autocomplete="new-password">
     <input id="regPass2" type="password" maxlength="30" placeholder="再次输入密码" autocomplete="new-password">
-    <input id="regBirth" type="date" style="letter-spacing:0" max="2026-10-13">
-    <p style="font-size:12px;color:#64748b;margin:-6px 0 12px">出生日期（本服务仅向年满18岁用户提供）</p>
-    <button id="regBtn" onclick="register()">注册并登录</button>
+    <button id="regBtn" onclick="toRealname()">下一步：实名认证</button>
+  </div>
+
+  <!-- 第三步：实名认证 -->
+  <div id="stepRealname" class="step">
+    <p>🪪 实名认证<br><span style="font-size:12px">为防止滥用，本服务要求实名使用</span></p>
+    <input id="regRealName" type="text" maxlength="10" placeholder="真实姓名" style="letter-spacing:0" autocomplete="name">
+    <input id="regIdcard" type="text" maxlength="18" placeholder="身份证号" style="letter-spacing:0" inputmode="numeric">
+    <p style="font-size:12px;color:#64748b;margin:-6px 0 12px">仅用于实名核验，身份证号原文不会被存储<br>未满18岁将无法完成注册</p>
+    <button id="verifyIdBtn" onclick="verifyRealname()">验证并完成注册</button>
   </div>
 
   <div id="msg"></div>
@@ -88,25 +95,43 @@ function verifyCode(){
   },function(){msg('❌ 验证失败','error');document.getElementById('verifyBtn').disabled=false;});
 }
 
-function register(){
+var pendingReg=null;
+
+function toRealname(){
   var u=document.getElementById('regUser').value.trim();
   var p=document.getElementById('regPass').value;
   var p2=document.getElementById('regPass2').value;
-  var b=document.getElementById('regBirth').value;
 
   if(u.length<2) return msg('❌ 用户名至少2个字符','error');
   if(p.length<4) return msg('❌ 密码至少4位','error');
   if(p!==p2) return msg('❌ 两次密码不一致','error');
-  if(!b) return msg('❌ 请填写出生日期','error');
 
-  document.getElementById('regBtn').disabled=true;
-  msg('⏳ 注册中...','');
-  ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:u,password:p,birthdate:b},function(d){
-    if(d.error){msg('❌ '+d.error,'error');document.getElementById('regBtn').disabled=false;return;}
-    localStorage.setItem('auth_token',d.token);
-    msg('✅ 注册成功！','success');
-    setTimeout(function(){window.location.href='/';},500);
-  },function(){msg('❌ 注册失败','error');document.getElementById('regBtn').disabled=false;});
+  pendingReg={username:u,password:p};
+  showStep('stepRealname');
+  msg('','');
+}
+
+function verifyRealname(){
+  var rn=document.getElementById('regRealName').value.trim();
+  var id=document.getElementById('regIdcard').value.trim();
+  if(rn.length<2) return msg('❌ 请填写真实姓名','error');
+  if(!id) return msg('❌ 请填写身份证号','error');
+  if(!pendingReg) return msg('❌ 请先完成上一步','error');
+
+  var btn=document.getElementById('verifyIdBtn');
+  btn.disabled=true;
+  msg('⏳ 实名核验中...','');
+  ajax('POST','/api/auth/verify-id',{verifyToken:verifyToken,realName:rn,idcard:id},function(d){
+    if(d.error){msg('❌ '+d.error,'error');btn.disabled=false;return;}
+    // 实名通过，完成注册
+    msg('✅ 实名通过，注册中...','success');
+    ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:pendingReg.username,password:pendingReg.password},function(d2){
+      if(d2.error){msg('❌ '+d2.error,'error');btn.disabled=false;return;}
+      localStorage.setItem('auth_token',d2.token);
+      msg('✅ 注册成功！','success');
+      setTimeout(function(){window.location.href='/';},800);
+    },function(){msg('❌ 注册失败','error');btn.disabled=false;});
+  },function(){msg('❌ 核验请求失败','error');btn.disabled=false;});
 }
 
 function showStep(id){

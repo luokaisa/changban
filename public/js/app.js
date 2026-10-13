@@ -23,6 +23,7 @@ async function checkAuth() {
     var data = await res.json();
     currentUser = data.user;
     hideLogin();
+    updateVerifyStatus();
     return true;
   } catch(e) {
     localStorage.removeItem('auth_token');
@@ -195,7 +196,39 @@ async function saveCharacter(e) {
     toast('\u2728 \u89D2\u8272\u521B\u5EFA\u6210\u529F');
     e.target.reset();
     navigate('home');
-  } catch (err) { toast('\u274C ' + err.message); }
+  } catch (err) {
+    toast('\u274C ' + err.message);
+    if (err.message.indexOf('实名') !== -1) navigate('settings');
+  }
+}
+
+// ===== 合规：已登录用户补实名认证 =====
+function updateVerifyStatus() {
+  var el = document.getElementById('verifyStatus');
+  if (!el) return;
+  if (currentUser && currentUser.verified) {
+    el.textContent = '✅ 已实名' + (currentUser.realName ? '（' + currentUser.realName + '）' : '');
+  } else {
+    el.textContent = '未实名：创建角色与克隆声音需要先完成实名认证';
+  }
+}
+
+async function verifyIdMe() {
+  var rn = document.getElementById('verifyRealName').value.trim();
+  var id = document.getElementById('verifyIdcard').value.trim();
+  if (rn.length < 2) return toast('❌ 请填写真实姓名');
+  if (!id) return toast('❌ 请填写身份证号');
+  try {
+    var res = await fetch('/api/auth/verify-id/me', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() },
+      body: JSON.stringify({ realName: rn, idcard: id }),
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    document.getElementById('verifyStatus').textContent = '✅ 已实名';
+    toast('✅ 实名认证通过');
+  } catch (err) { toast('❌ ' + err.message); }
 }
 
 // ===== 编辑角色 =====
