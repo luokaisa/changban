@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const storage = require('../services/storage');
 const memories = require('../services/memories');
+const wallet = require('../services/wallet');
 const { v4: uuidv4 } = require('uuid');
 
 /** 获取当前用户的角色列表（含记忆点/完整度） */
@@ -36,6 +37,25 @@ router.get('/:id/memories', (req, res) => {
     ...comp,
     milestone: memories.milestone(comp.percent),
     log: memories.getLog(char).slice(-50).reverse(),
+  });
+});
+
+/**
+ * 角色消费统计（为"告别返还"打基础）
+ * beansSpent: 该角色累计消费豆；cnyValue: 按 1元=10豆 折算；
+ * refundable50: 50% 返还参考额（元，正式上线前需财务测算定档）
+ */
+router.get('/:id/spending', (req, res) => {
+  const chars = storage.read('characters');
+  const char = chars[req.params.id];
+  if (!char) return res.status(404).json({ error: '角色不存在' });
+  if (char.userId !== req.user.userId) return res.status(403).json({ error: '无权访问该角色' });
+  const beansSpent = wallet.spentOnCharacter(req.user.userId, req.params.id);
+  const cnyValue = beansSpent / 10;
+  res.json({
+    beansSpent,
+    cnyValue: Math.round(cnyValue * 100) / 100,
+    refundable50: Math.round(cnyValue * 0.5 * 100) / 100,
   });
 });
 

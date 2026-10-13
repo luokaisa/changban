@@ -160,7 +160,9 @@ router.post('/:characterId/gift', async (req, res) => {
 
     // 发货成功后才扣豆（失败不扣，可重试）
     if (beanCost > 0) {
-      const balance = wallet.spendBeans(req.user.userId, beanCost, `寄心意:${gift.name}`);
+      const balance = wallet.spendBeans(
+        req.user.userId, beanCost, `寄心意:${gift.name}`, req.params.characterId
+      );
       result.beanBalance = balance;
     }
     res.json(result);

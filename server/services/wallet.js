@@ -13,7 +13,7 @@ function writeTxns(arr) {
   storage.write('bean_txns', arr.slice(-1000));
 }
 
-function logTxn(userId, type, amount, label) {
+function logTxn(userId, type, amount, label, characterId) {
   const arr = readTxns();
   arr.push({
     id: 'TX' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase(),
@@ -21,6 +21,7 @@ function logTxn(userId, type, amount, label) {
     type, // recharge | spend
     amount, // 豆，正数为入，负数为出
     label,
+    characterId: characterId || null, // 消费归因：花在哪个角色上（为"告别返还"打基础）
     at: Date.now(),
   });
   writeTxns(arr);
@@ -43,14 +44,14 @@ function addBeans(userId, beans, label) {
 }
 
 /** 消费扣豆：余额不足返回 null */
-function spendBeans(userId, beans, label) {
+function spendBeans(userId, beans, label, characterId) {
   const wallets = readWallets();
   const w = wallets[userId] || { balance: 0 };
   if (w.balance < beans) return null;
   w.balance -= beans;
   wallets[userId] = w;
   writeWallets(wallets);
-  logTxn(userId, 'spend', -beans, label);
+  logTxn(userId, 'spend', -beans, label, characterId);
   return w.balance;
 }
 
@@ -58,4 +59,11 @@ function recentTxns(userId, n = 20) {
   return readTxns().filter((t) => t.userId === userId).slice(-n).reverse();
 }
 
-module.exports = { getBalance, addBeans, spendBeans, recentTxns };
+/** 某角色累计消费（豆） */
+function spentOnCharacter(userId, characterId) {
+  return readTxns()
+    .filter((t) => t.userId === userId && t.type === 'spend' && t.characterId === characterId)
+    .reduce((s, t) => s + Math.abs(t.amount), 0);
+}
+
+module.exports = { getBalance, addBeans, spendBeans, recentTxns, spentOnCharacter };
