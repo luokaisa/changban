@@ -176,11 +176,15 @@
           <div>
             <strong id="chatName"></strong>
             <span id="chatRelation" class="relation-tag"></span>
+            <span class="ai-identity">🤖 AI 纪念角色 · 语音为 AI 合成</span>
           </div>
         </div>
-        <button class="icon-btn" onclick="clearChat()">🗑️</button>
+        <div style="display:flex;gap:2px;flex-shrink:0">
+          <button class="icon-btn" onclick="cycleFontSize()" title="切换字号">🅰️</button>
+          <button class="icon-btn" id="autoVoiceBtn" onclick="toggleAutoVoice()" title="自动播放语音">🔊</button>
+          <button class="icon-btn" onclick="clearChat()">🗑️</button>
+        </div>
       </div>
-      <div class="ai-disclosure">🤖 你正在与 AI 生成的纪念角色对话，TA 不是真人 · 回复与语音均为 AI 合成</div>
       <div id="chatMessages" class="chat-messages"></div>
       <div class="chat-input-area">
         <button id="voiceInputBtn" class="icon-btn voice-btn" onclick="startVoiceInput()">🎤</button>

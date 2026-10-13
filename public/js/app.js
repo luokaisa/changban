@@ -449,6 +449,8 @@ async function startChat(characterId) {
     document.getElementById('chatMessages').innerHTML = '';
     document.getElementById('chatInput').value = '';
     document.getElementById('chatInput').focus();
+    applyFontSize();
+    updateAutoVoiceBtn();
   } catch (err) { toast('\u274C \u52A0\u8F7D\u89D2\u8272\u5931\u8D25'); navigate('home'); }
 }
 
@@ -503,20 +505,98 @@ function addMessage(role, text, audioUrl, isCrisis) {
     contentArea.appendChild(badge);
   }
   if (audioUrl) {
-    var playBtn = document.createElement('div');
-    playBtn.className = 'voice-auto-play';
-    playBtn.innerHTML = '\uD83D\uDD0A \u64AD\u653E\u8BED\u97F3';
-    playBtn.style.cursor = 'pointer';
-    playBtn.style.fontSize = '12px';
-    playBtn.style.color = '#a78bfa';
-    playBtn.style.marginTop = '4px';
-    playBtn.onclick = function() { var a = new Audio(audioUrl); a.play().catch(function() {}); };
-    contentArea.appendChild(playBtn);
+    var player = createVoicePlayer(audioUrl);
+    contentArea.appendChild(player);
+    // 自动连播（可在 header 一键开关；浏览器若拦截则回落为手动）
+    if (role === 'ai' && !isCrisis && autoVoiceOn()) {
+      setTimeout(function() { player._toggle(); }, 400);
+    }
   }
   wrapper.appendChild(avatarDiv);
   wrapper.appendChild(contentArea);
   msgs.appendChild(wrapper);
   msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ===== 语音播放条 =====
+var currentVoiceAudio = null;
+
+function autoVoiceOn() {
+  return localStorage.getItem('auto_voice') !== '0';
+}
+
+function toggleAutoVoice() {
+  var on = !autoVoiceOn();
+  localStorage.setItem('auto_voice', on ? '1' : '0');
+  updateAutoVoiceBtn();
+  toast(on ? '🔊 已开启语音自动播放' : '🔇 已关闭语音自动播放');
+}
+
+function updateAutoVoiceBtn() {
+  var b = document.getElementById('autoVoiceBtn');
+  if (b) b.textContent = autoVoiceOn() ? '🔊' : '🔇';
+}
+
+function createVoicePlayer(audioUrl) {
+  var wrap = document.createElement('div');
+  wrap.className = 'voice-player';
+  wrap.innerHTML = '<button class="vp-btn">▶</button>' +
+    '<div class="vp-track"><div class="vp-fill"></div></div>' +
+    '<span class="vp-time">0:00</span>';
+  var audio = new Audio(audioUrl);
+  var btn = wrap.querySelector('.vp-btn');
+  var fill = wrap.querySelector('.vp-fill');
+  var time = wrap.querySelector('.vp-time');
+  var track = wrap.querySelector('.vp-track');
+
+  function fmt(s) {
+    s = Math.floor(s || 0);
+    return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+  }
+  function toggle() {
+    if (audio.paused) {
+      if (currentVoiceAudio && currentVoiceAudio !== audio) { try { currentVoiceAudio.pause(); } catch (e) {} }
+      currentVoiceAudio = audio;
+      audio.play().catch(function() {});
+    } else {
+      audio.pause();
+    }
+  }
+  btn.onclick = toggle;
+  audio.onplay = function() { btn.textContent = '⏸'; };
+  audio.onpause = function() { btn.textContent = '▶'; };
+  audio.onended = function() { btn.textContent = '▶'; fill.style.width = '0'; };
+  audio.ontimeupdate = function() {
+    if (audio.duration) fill.style.width = (audio.currentTime / audio.duration * 100) + '%';
+    time.textContent = fmt(audio.currentTime);
+  };
+  audio.onloadedmetadata = function() { time.textContent = fmt(audio.duration); };
+  track.onclick = function(e) {
+    var r = track.getBoundingClientRect();
+    var ratio = (e.clientX - r.left) / r.width;
+    if (audio.duration) audio.currentTime = ratio * audio.duration;
+  };
+  wrap._toggle = toggle;
+  return wrap;
+}
+
+// ===== 字号切换（正常 / 大 / 更大） =====
+var FONT_SIZES = ['', 'fs-2', 'fs-3'];
+var FONT_NAMES = ['标准字号', '大字号', '超大字号'];
+
+function applyFontSize() {
+  var idx = parseInt(localStorage.getItem('chat_fs') || '0', 10) || 0;
+  var msgs = document.getElementById('chatMessages');
+  FONT_SIZES.forEach(function(c) { if (c) msgs.classList.remove(c); });
+  if (FONT_SIZES[idx]) msgs.classList.add(FONT_SIZES[idx]);
+}
+
+function cycleFontSize() {
+  var idx = (parseInt(localStorage.getItem('chat_fs') || '0', 10) || 0) + 1;
+  if (idx >= FONT_SIZES.length) idx = 0;
+  localStorage.setItem('chat_fs', String(idx));
+  applyFontSize();
+  toast('🅰️ ' + FONT_NAMES[idx]);
 }
 
 function playAudio(url) {
