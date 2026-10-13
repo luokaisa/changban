@@ -211,7 +211,7 @@ async function startFarewellRitual(characterId) {
     '</div></div>';
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user' }, audio: false,
+      video: { facingMode: { ideal: 'environment' } }, audio: false,
     });
     ritualStream = stream;
     document.getElementById('ritualVideo').srcObject = stream;
