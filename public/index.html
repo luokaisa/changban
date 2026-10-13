@@ -88,6 +88,14 @@
             <option value="其他">其他（在性格中描述）</option>
           </select>
         </div>
+        <div class="form-group">
+          <div class="consent-box">
+            <label>
+              <input type="checkbox" id="charConsent">
+              <span>我确认：已获得逝者生前的书面意愿，或全体近亲属的一致书面同意，授权创建此 AI 纪念角色。我理解这是创建角色的前提条件，虚假声明将导致角色被删除并承担相应责任。</span>
+            </label>
+          </div>
+        </div>
         <button type="submit" class="btn-primary">创建角色 ✨</button>
       </form>
     </main>
@@ -172,6 +180,7 @@
         </div>
         <button class="icon-btn" onclick="clearChat()">🗑️</button>
       </div>
+      <div class="ai-disclosure">🤖 你正在与 AI 生成的纪念角色对话，TA 不是真人 · 回复与语音均为 AI 合成</div>
       <div id="chatMessages" class="chat-messages"></div>
       <div class="chat-input-area">
         <button id="voiceInputBtn" class="icon-btn voice-btn" onclick="startVoiceInput()">🎤</button>
@@ -226,6 +235,13 @@
         </div>
         <button class="btn-primary" onclick="changePassword()" style="width:100%">修改密码</button>
         <p id="passMsg" class="auth-error"></p>
+      </div>
+
+      <div class="settings-section">
+        <h3>🗂️ 我的数据</h3>
+        <button class="btn-secondary" onclick="exportMyData()" style="width:100%;margin-bottom:8px">📥 导出我的数据（JSON）</button>
+        <button class="btn-danger" onclick="deleteMyAccount()" style="width:100%">🗑️ 删除账号及全部数据</button>
+        <p class="hint" style="margin-top:8px">删除后不可恢复。ElevenLabs 侧的克隆声音需在其控制台另行删除。</p>
       </div>
 
       <div class="settings-section">

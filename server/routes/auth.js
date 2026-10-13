@@ -168,10 +168,11 @@ router.post('/verify-code', (req, res) => {
 
 // ===== 手机号验证后注册（设置用户名+密码） =====
 router.post('/register-by-phone', (req, res) => {
-  const { verifyToken, username, password } = req.body;
+  const { verifyToken, username, password, birthdate } = req.body;
   if (!verifyToken || !username || !password) return res.status(400).json({ error: '参数不完整' });
   if (password.length < 4) return res.status(400).json({ error: '密码至少4位' });
   if (username.length < 2) return res.status(400).json({ error: '用户名至少2个字符' });
+  if (!isAdult(birthdate)) return res.status(403).json({ error: '根据法规要求，本服务仅向年满18岁的用户提供' });
   
   // 验证令牌
   const vf = path.join(__dirname, '..', '..', 'data', 'verify-tokens.json');
@@ -193,11 +194,12 @@ router.post('/register-by-phone', (req, res) => {
   const created = auth.createUser(username, password, role);
   if (!created) return res.status(409).json({ error: '用户名已存在' });
   
-  // 保存手机号
+  // 保存手机号与出生日期（合规留存）
   const storage = require('../services/storage');
   const users = storage.read('users');
   if (users[username]) {
     users[username].phone = record.phone;
+    users[username].birthdate = birthdate;
     storage.write('users', users);
   }
   
@@ -213,16 +215,33 @@ router.get('/status', (req, res) => {
   res.json({ hasUsers: auth.hasAnyUser() });
 });
 
+// ===== 合规：未成年人禁入（虚拟亲属服务不得向未满18岁提供） =====
+function isAdult(birthdate) {
+  if (!birthdate || !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return false;
+  const b = new Date(birthdate + 'T00:00:00');
+  if (isNaN(b.getTime()) || b.getTime() > Date.now()) return false;
+  const now = new Date();
+  let age = now.getFullYear() - b.getFullYear();
+  const m = now.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  return age >= 18;
+}
+
 // ===== 注册（第一个用户为管理员，后续用户由管理员添加） =====
 router.post('/register', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, birthdate } = req.body;
   if (!username || !password) return res.status(400).json({ error: '请填写用户名和密码' });
   if (password.length < 4) return res.status(400).json({ error: '密码至少4位' });
   if (username.length < 2) return res.status(400).json({ error: '用户名至少2个字符' });
+  if (!isAdult(birthdate)) return res.status(403).json({ error: '根据法规要求，本服务仅向年满18岁的用户提供' });
 
   const role = auth.hasAnyUser() ? 'user' : 'admin';
   const user = auth.createUser(username, password, role);
   if (!user) return res.status(409).json({ error: '用户名已存在' });
+
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  if (users[username]) { users[username].birthdate = birthdate; storage.write('users', users); }
 
   const token = auth.login(username, password);
   res.json({ token, user });
@@ -287,6 +306,65 @@ router.get('/me', (req, res) => {
   const session = auth.verifyToken(token);
   if (!session) return res.status(401).json({ error: '登录已过期' });
   res.json({ user: { id: session.userId, username: session.username, role: session.role } });
+});
+
+// ===== 合规：导出个人数据 =====
+router.get('/export', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).json({ error: '未登录' });
+  const session = auth.verifyToken(token);
+  if (!session) return res.status(401).json({ error: '登录已过期' });
+
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  const chars = storage.read('characters');
+  const conversations = storage.read('conversations');
+
+  const user = users[session.username];
+  const myChars = Object.fromEntries(
+    Object.entries(chars).filter(([_, c]) => c.userId === session.userId)
+  );
+  const myConv = Object.fromEntries(
+    Object.entries(conversations).filter(([k]) => k.startsWith(session.userId + '_'))
+  );
+
+  res.json({
+    exportedAt: new Date().toISOString(),
+    user: user ? { username: session.username, phone: user.phone || '', birthdate: user.birthdate || '', role: user.role, createdAt: user.createdAt } : null,
+    characters: myChars,
+    conversations: myConv,
+  });
+});
+
+// ===== 合规：删除账号及全部个人数据（不可恢复） =====
+router.delete('/account', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).json({ error: '未登录' });
+  const session = auth.verifyToken(token);
+  if (!session) return res.status(401).json({ error: '登录已过期' });
+
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  const chars = storage.read('characters');
+  const conversations = storage.read('conversations');
+
+  // 删角色
+  for (const [id, c] of Object.entries(chars)) {
+    if (c.userId === session.userId) delete chars[id];
+  }
+  storage.write('characters', chars);
+  // 删对话
+  for (const k of Object.keys(conversations)) {
+    if (k.startsWith(session.userId + '_')) delete conversations[k];
+  }
+  storage.write('conversations', conversations);
+  // 删用户并登出
+  delete users[session.username];
+  storage.write('users', users);
+  auth.logout(token);
+
+  // 注：ElevenLabs 侧克隆声音需在 ElevenLabs 控制台另行删除，见设置页说明
+  res.json({ success: true });
 });
 
 module.exports = router;

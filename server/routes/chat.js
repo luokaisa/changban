@@ -3,6 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const storage = require('../services/storage');
+const crisis = require('../services/crisis');
 const openai = require('../services/openai');
 const elevenlabs = require('../services/elevenlabs');
 const config = require('../config');
@@ -88,6 +89,14 @@ router.post('/:characterId', async (req, res) => {
 
     const userId = req.user.userId;
     addMessage(userId, req.params.characterId, 'user', message);
+
+    // ===== 合规：极端情绪干预（先于 LLM，命中则直接返回干预回复） =====
+    if (crisis.detectCrisis(message)) {
+      const reply = crisis.interventionReply(character.name);
+      addMessage(userId, req.params.characterId, 'assistant', reply);
+      return res.json({ reply, audioUrl: null, crisis: true, character: { name: character.name, avatar: character.avatar } });
+    }
+
     const history = getHistory(userId, req.params.characterId);
 
     // ===== LLM 调用 =====

@@ -92,7 +92,31 @@ function navigate(page, param) {
 
   if (page === 'home') loadCharacters();
   if (page === 'edit' && param) loadEditForm(param);
-  if (page === 'chat' && param) startChat(param);
+  if (page === 'chat' && param) { startChat(param); startUsageReminder(); }
+  else stopUsageReminder();
+}
+
+// ===== 合规：连续使用提醒（30 分钟首次，之后每小时） =====
+let usageTimer = null;
+let usageRounds = 0;
+function startUsageReminder() {
+  stopUsageReminder();
+  usageRounds = 0;
+  var showOnce = function() {
+    usageRounds++;
+    var label = usageRounds === 1 ? '30 分钟' : '很久';
+    var r = document.createElement('div');
+    r.className = 'usage-reminder';
+    r.innerHTML = '🕯️ 不知不觉已经聊了 ' + label + ' 了。<br>TA 会一直在这里等你，注意休息，保重身体。<br><button onclick="this.parentElement.remove()">知道了</button>';
+    document.body.appendChild(r);
+    usageTimer = setTimeout(showOnce, 60 * 60 * 1000);
+  };
+  usageTimer = setTimeout(showOnce, 30 * 60 * 1000);
+}
+function stopUsageReminder() {
+  if (usageTimer) { clearTimeout(usageTimer); usageTimer = null; }
+  var r = document.querySelector('.usage-reminder');
+  if (r) r.remove();
 }
 
 // ===== Toast =====
@@ -141,7 +165,7 @@ async function loadCharacters() {
     list.innerHTML = chars.map(function(c) {
       return '<div class=\"char-card\" onclick=\"navigate(\'chat\',\'' + c.id + '\')\">' +
         (c.hasAvatar ? '<img src=\"/api/avatar/' + c.id + '\" class=\"char-card-avatar\" onerror=\"this.style.display=\'none\'\">' : '<div class=\"char-card-avatar placeholder\">\uD83D\uDD4A\uFE0F</div>') +
-        '<div class=\"char-card-info\"><h3>' + c.name + '</h3><p>' + (c.relationship || '') + '</p></div>' +
+        '<div class=\"char-card-info\"><h3>' + c.name + ' <span class=\"ai-tag\">AI</span></h3><p>' + (c.relationship || '') + '</p></div>' +
         '<span class=\"char-card-arrow\" onclick=\"event.stopPropagation();navigate(\'edit\',\'' + c.id + '\')\">\u270F\uFE0F</span></div>';
     }).join('');
   } catch (err) {
@@ -154,6 +178,8 @@ async function saveCharacter(e) {
   e.preventDefault();
   var name = document.getElementById('charName').value.trim();
   if (!name) return toast('\u8BF7\u586B\u5199\u79F0\u547C');
+  var consent = document.getElementById('charConsent');
+  if (consent && !consent.checked) return toast('\u8BF7\u5148\u786E\u8BA4\u6388\u6743\u58F0\u660E');
   try {
     await api('/api/characters', {
       method: 'POST',
@@ -163,6 +189,7 @@ async function saveCharacter(e) {
         personality: document.getElementById('charPersonality').value.trim(),
         memories: document.getElementById('charMemories').value.trim(),
         dialect: document.getElementById('charDialect').value,
+        consent: !!(consent && consent.checked),
       }),
     });
     toast('\u2728 \u89D2\u8272\u521B\u5EFA\u6210\u529F');
@@ -408,12 +435,18 @@ async function sendMessage() {
   try {
     var res = await api('/api/chat/' + currentCharId, { method: 'POST', body: JSON.stringify({ message: text }) });
     document.getElementById('typing-indicator').remove();
-    addMessage('ai', res.reply, res.audioUrl || null);
+    addMessage('ai', res.reply, res.audioUrl || null, res.crisis || false);
   } catch (err) { document.getElementById('typing-indicator').remove(); toast('\u274C ' + err.message); }
 }
 
-function addMessage(role, text, audioUrl) {
+function addMessage(role, text, audioUrl, isCrisis) {
   var msgs = document.getElementById('chatMessages');
+  if (isCrisis) {
+    var banner = document.createElement('div');
+    banner.className = 'crisis-banner';
+    banner.innerHTML = '<strong>⚠️ 温馨提醒</strong><br>如果你正经历强烈的痛苦，请不要独自承受。下方有 24 小时心理援助热线，随时可以拨打。';
+    msgs.appendChild(banner);
+  }
   var wrapper = document.createElement('div');
   wrapper.className = 'msg-row ' + role;
   var time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -426,10 +459,16 @@ function addMessage(role, text, audioUrl) {
   var contentArea = document.createElement('div');
   contentArea.className = 'msg-content';
   var bubble = document.createElement('div');
-  bubble.className = 'msg-bubble ' + (role === 'ai' ? 'ai' : 'user');
+  bubble.className = 'msg-bubble ' + (role === 'ai' ? 'ai' : 'user') + (isCrisis ? ' crisis' : '');
   var displayText = (text || '').replace(/\n/g, '<br>');
   bubble.innerHTML = displayText + '<span class=\"time\">' + time + '</span>';
   contentArea.appendChild(bubble);
+  if (role === 'ai') {
+    var badge = document.createElement('div');
+    badge.className = 'ai-badge';
+    badge.textContent = '🤖 AI 生成';
+    contentArea.appendChild(badge);
+  }
   if (audioUrl) {
     var playBtn = document.createElement('div');
     playBtn.className = 'voice-auto-play';
@@ -511,6 +550,35 @@ async function changePassword() {
     document.getElementById('newPass').value = '';
     document.getElementById('newPass2').value = '';
   } catch (err) { msg.textContent = '\u274C ' + err.message; msg.style.color = '#ef4444'; }
+}
+
+// ===== 合规：数据权利 =====
+async function exportMyData() {
+  try {
+    var res = await fetch('/api/auth/export', { headers: { 'x-auth-token': getToken() } });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'changban-data-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('✅ 数据已导出');
+  } catch (err) { toast('❌ ' + err.message); }
+}
+
+async function deleteMyAccount() {
+  if (!confirm('确定删除账号及全部数据吗？此操作不可恢复！')) return;
+  if (!confirm('再次确认：所有角色、对话记录都将被永久删除，继续吗？')) return;
+  try {
+    var res = await fetch('/api/auth/account', { method: 'DELETE', headers: { 'x-auth-token': getToken() } });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    localStorage.removeItem('auth_token');
+    toast('账号已删除');
+    setTimeout(function() { window.location.href = '/'; }, 1000);
+  } catch (err) { toast('❌ ' + err.message); }
 }
 
 // ===== 初始化 =====

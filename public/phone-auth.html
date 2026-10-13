@@ -41,6 +41,8 @@ a{display:block;margin-top:16px;color:#64748b;font-size:13px;text-decoration:non
     <input id="regUser" type="text" maxlength="20" placeholder="用户名" autocomplete="username">
     <input id="regPass" type="password" maxlength="30" placeholder="密码" autocomplete="new-password">
     <input id="regPass2" type="password" maxlength="30" placeholder="再次输入密码" autocomplete="new-password">
+    <input id="regBirth" type="date" style="letter-spacing:0" max="2026-10-13">
+    <p style="font-size:12px;color:#64748b;margin:-6px 0 12px">出生日期（本服务仅向年满18岁用户提供）</p>
     <button id="regBtn" onclick="register()">注册并登录</button>
   </div>
 
@@ -90,14 +92,16 @@ function register(){
   var u=document.getElementById('regUser').value.trim();
   var p=document.getElementById('regPass').value;
   var p2=document.getElementById('regPass2').value;
-  
+  var b=document.getElementById('regBirth').value;
+
   if(u.length<2) return msg('❌ 用户名至少2个字符','error');
   if(p.length<4) return msg('❌ 密码至少4位','error');
   if(p!==p2) return msg('❌ 两次密码不一致','error');
-  
+  if(!b) return msg('❌ 请填写出生日期','error');
+
   document.getElementById('regBtn').disabled=true;
   msg('⏳ 注册中...','');
-  ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:u,password:p},function(d){
+  ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:u,password:p,birthdate:b},function(d){
     if(d.error){msg('❌ '+d.error,'error');document.getElementById('regBtn').disabled=false;return;}
     localStorage.setItem('auth_token',d.token);
     msg('✅ 注册成功！','success');

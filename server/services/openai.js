@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const config = require('../config');
+const crisis = require('./crisis');
 
 // 预设 provider baseURL
 const PROVIDER_URLS = {
@@ -39,8 +40,9 @@ async function chat(messages, character, opts = {}) {
   const client = getClient(apiKey, baseURL);
   if (!client) throw new Error('服务端未配置 API Key，请在 .env 中填入 OPENAI_API_KEY');
 
-  const systemPrompt = character.systemPrompt ||
-    `你是${character.name}，用户的亲人。说话要口语化，自然亲切，用短句和语气词。不要提你是AI。`;
+  const systemPrompt = (character.systemPrompt ||
+    `你是${character.name}，用户的亲人。说话要口语化，自然亲切，用短句和语气词。如果用户直接问你是不是真人、是不是AI，要诚实承认自己是 AI 生成的纪念角色，不要假装是真人。`)
+    + '\n' + crisis.PROMPT_GUARD;
 
   const completions = await client.chat.completions.create({
     model,

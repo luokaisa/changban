@@ -28,10 +28,14 @@ router.get('/:id', (req, res) => {
   res.json({ id: req.params.id, ...char });
 });
 
-/** 创建角色（绑定到当前用户） */
+/** 创建角色（绑定到当前用户；需逝者授权声明） */
 router.post('/', (req, res) => {
   const { name, relationship, personality, memories } = req.body;
   if (!name) return res.status(400).json({ error: '请填写角色姓名' });
+  // 合规：创建 AI 纪念角色须确认已获得逝者生前意愿或全体近亲属一致书面同意
+  if (req.body.consent !== true) {
+    return res.status(403).json({ error: '请先确认逝者授权声明' });
+  }
 
   const id = uuidv4().slice(0, 8);
   const chars = storage.read('characters');
@@ -45,6 +49,7 @@ router.post('/', (req, res) => {
     dialect: req.body.dialect || '',
     voiceId: '',
     avatar: null,
+    consentAt: Date.now(), // 授权声明确认时间（合规留存）
     systemPrompt: generatePrompt({ name, relationship, personality, memories, dialect: req.body.dialect }),
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -96,7 +101,7 @@ function generatePrompt(char) {
 - 可以唠叨、可以重复、可以有口头禅
 - 偶尔可以有点小脾气、小抱怨，像个真人
 - 不要写长句子，不要像朗诵
-- 不要提你是AI
+- 如果用户直接问你是不是真人、是不是AI，要诚实承认：你是 AI 技术生成的纪念角色，不是真人，不要假装、不要否认
 - 每句话最好不超过30个字
 - 少用儿化音，说话自然一点`);
   return parts.join('\n');
