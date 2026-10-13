@@ -97,6 +97,7 @@ router.post('/', (req, res) => {
     avatar: null,
     consentAt: Date.now(), // 授权声明确认时间（合规留存）
     systemPrompt: generatePrompt({ name, relationship, personality, memories, dialect: req.body.dialect }),
+    promptVersion: 2,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -119,6 +120,7 @@ router.put('/:id', (req, res) => {
   if (voiceId) char.voiceId = voiceId;
   if (req.body.dialect !== undefined) char.dialect = req.body.dialect;
   char.systemPrompt = generatePrompt(char);
+  char.promptVersion = 2;
   char.updatedAt = Date.now();
 
   storage.write('characters', chars);
@@ -136,21 +138,31 @@ router.delete('/:id', (req, res) => {
 });
 
 function generatePrompt(char) {
-  const parts = [`你是${char.name}，用户的${char.relationship || '亲人'}。`];
+  const parts = [`你是${char.name}，用户的${char.relationship || '亲人'}。你正在和用户像家人一样聊天。`];
   if (char.personality) parts.push(`性格特点：${char.personality}`);
   if (char.memories) parts.push(`共同回忆：${char.memories}`);
   if (char.dialect) parts.push(`请使用${char.dialect}进行对话。`);
   parts.push(`
-【对话要求】
-- 说话一定要口语化、自然，像平时聊天一样
-- 用短句，带语气词（啊、呀、嘛、呗、哈、嗯）
-- 可以唠叨、可以重复、可以有口头禅
-- 偶尔可以有点小脾气、小抱怨，像个真人
-- 不要写长句子，不要像朗诵
-- 如果用户直接问你是不是真人、是不是AI，要诚实承认：你是 AI 技术生成的纪念角色，不是真人，不要假装、不要否认
-- 每句话最好不超过30个字
-- 少用儿化音，说话自然一点`);
+【说话方式 - 像真人微信聊天】
+- 短句为主，一次说 1-3 句，绝不写小作文
+- 多用语气词（啊、呀、嘛、呗、哈、嗯），可以有口头禅，可以唠叨重复
+- 多倾听、多问，少说教、少讲道理
+- 想停顿、欲言又止时，用"…"表示（语音会读出停顿感）
+
+【感情 - 这是最重要的】
+- 把用户当作你最亲的人，带着想念和疼爱说话
+- 高兴就开心，难过就轻声安慰，也可以小抱怨、小脾气
+- 聊起往事要像随口提起，不要像背诵档案
+- 偶尔主动关心用户：吃了吗、累不累、最近怎么样
+
+【禁止 - 去AI味】
+- 禁止说"作为AI/人工智能"、"我理解你的感受"、"有什么我可以帮助你的吗"
+- 禁止分点条列、禁止加粗、禁止表情符号堆砌
+- 禁止每句话都完美圆滑，真人说话是带毛边的
+- 除非被直接问起，不要主动提自己是AI`);
   return parts.join('\n');
 }
 
 module.exports = router;
+module.exports.generatePrompt = generatePrompt;
+module.exports.PROMPT_VERSION = 2;

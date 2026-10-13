@@ -9,6 +9,7 @@ const elevenlabs = require('../services/elevenlabs');
 const gifts = require('../services/gifts');
 const memories = require('../services/memories');
 const wallet = require('../services/wallet');
+const { generatePrompt, PROMPT_VERSION } = require('./characters');
 const config = require('../config');
 
 const MAX_AUDIO_FILES = 50;      // TTS 回复音频最多保留份数
@@ -69,10 +70,17 @@ router.get('/gifts', (req, res) => {
 });
 
 /** TTS 合成回复语音（复用） */
+/** TTS 前处理：把模型输出的"…"停顿标记加重，引擎会读出更明显的停顿 */
+function emphasizePauses(text) {
+  return text
+    .replace(/…{3,}/g, '……')   // 归一化
+    .replace(/…(?!…)/g, '…… '); // 单个 … → 双 … 加空格，停顿更长
+}
+
 async function ttsReply(character, reply) {
   if (!character.voiceId) return null;
   try {
-    const audioBuffer = await elevenlabs.textToSpeech(reply, character.voiceId);
+    const audioBuffer = await elevenlabs.textToSpeech(emphasizePauses(reply), character.voiceId);
     const audioFile = `audio_${Date.now()}.mp3`;
     const audioPath = path.join(__dirname, '..', '..', 'public', 'uploads', audioFile);
     fs.writeFileSync(audioPath, audioBuffer);
@@ -93,6 +101,15 @@ function llmOpts(req) {
   };
 }
 
+/** 老角色 prompt 自动升级到新版（聊一次即生效） */
+function ensurePrompt(character, chars) {
+  if (character.promptVersion !== PROMPT_VERSION) {
+    character.systemPrompt = generatePrompt(character);
+    character.promptVersion = PROMPT_VERSION;
+    storage.write('characters', chars);
+  }
+}
+
 const giftPayEnabled = () => process.env.GIFTS_PAY_ENABLED === 'true';
 
 /** 初见问候：穿越后 TA 的第一句话（含语音），记为对话首条 */
@@ -102,6 +119,7 @@ router.post('/:characterId/greet', async (req, res) => {
     const character = chars[req.params.characterId];
     if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
     if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
+    ensurePrompt(character, chars);
 
     const scoped = {
       ...character,
@@ -126,6 +144,7 @@ router.post('/:characterId/farewell', async (req, res) => {
     const character = chars[req.params.characterId];
     if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
     if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
+    ensurePrompt(character, chars);
 
     const scoped = {
       ...character,
@@ -144,6 +163,7 @@ router.post('/:characterId/farewell', async (req, res) => {
 
 /** 发货：心意消息落库 → 专属回应 → 语音 → 记点 */
 async function deliverGift(userId, characterId, character, gift, chars, req) {
+  ensurePrompt(character, chars);
   const giftMsg = `送给你：${gift.emoji}${gift.name}`;
   addMessage(userId, characterId, 'user', giftMsg);
 
@@ -246,6 +266,7 @@ router.post('/:characterId', async (req, res) => {
     if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
 
     const userId = req.user.userId;
+    ensurePrompt(character, chars);
     addMessage(userId, req.params.characterId, 'user', message);
 
     // ===== 合规：极端情绪干预（先于 LLM，命中则直接返回干预回复） =====
