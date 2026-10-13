@@ -1,6 +1,6 @@
 // ===== 时光机仪式：初见穿越 / 告别回到现实 =====
 let ritualSkipped = false;
-let ritualAudio = null;
+let ritualAudioEl = null; // 降级通道的 HTMLAudio
 let ritualStream = null;
 
 function ritualEl() {
@@ -30,7 +30,8 @@ function ritualHide() {
 }
 
 function stopRitualMedia() {
-  if (ritualAudio) { try { ritualAudio.pause(); } catch (e) {} ritualAudio = null; }
+  if (ritualSrc) { try { ritualSrc.stop(); } catch (e) {} ritualSrc = null; }
+  if (ritualAudioEl) { try { ritualAudioEl.pause(); } catch (e) {} ritualAudioEl = null; }
   if (ritualStream) {
     ritualStream.getTracks().forEach((t) => t.stop());
     ritualStream = null;
@@ -92,12 +93,11 @@ function runTunnel(canvas, reverse, duration) {
   });
 }
 
-/** 时光机音效：噪声扫频 whoosh，由大到小（Web Audio 现场合成） */
+/** 时光机音效：噪声扫频 whoosh，由大到小（Web Audio 现场合成，复用手势激活的 context） */
 function playWarpSound(durationMs) {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === 'suspended') ctx.resume();
+      const ctx = await ensureRitualAudio();
       const dur = durationMs / 1000;
       const buffer = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
       const data = buffer.getChannelData(0);
@@ -117,24 +117,57 @@ function playWarpSound(durationMs) {
       filter.connect(gain);
       gain.connect(ctx.destination);
       noise.start();
-      noise.onended = () => { ctx.close(); resolve(); };
+      noise.onended = () => { resolve(); };
       setTimeout(resolve, durationMs + 500);
     } catch (e) { resolve(); }
   });
 }
 
+/** 共享 AudioContext：在点击手势内激活，隧道播完（手势过期）后依然有效 */
+let ritualCtx = null;
+let ritualSrc = null; // 当前播放的 buffer source（可打断）
+
+async function ensureRitualAudio() {
+  if (!ritualCtx) {
+    ritualCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (ritualCtx.state === 'suspended') {
+    try { await ritualCtx.resume(); } catch (e) {}
+  }
+  return ritualCtx;
+}
+
 /** 播放语音并等待结束（可被跳过打断） */
 function playRitualAudio(url) {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     if (!url) return resolve();
-    ritualAudio = new Audio(url);
-    ritualAudio.onended = () => resolve();
-    ritualAudio.onerror = () => resolve();
-    ritualAudio.play().catch(() => resolve());
-    const check = setInterval(() => {
-      if (ritualSkipped) { clearInterval(check); resolve(); }
-    }, 200);
-    ritualAudio.onended = () => { clearInterval(check); resolve(); };
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    try {
+      const ctx = await ensureRitualAudio();
+      const resp = await fetch(url);
+      const buf = await ctx.decodeAudioData(await resp.arrayBuffer());
+      if (ritualSkipped) return finish();
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.onended = finish;
+      ritualSrc = src;
+      src.start();
+      setTimeout(finish, 30000); // 兜底
+    } catch (e) {
+      // 降级：HTMLAudio（短隧道/手势有效期内可用）
+      try {
+        const a = new Audio(url);
+        ritualAudioEl = a;
+        a.onended = finish;
+        a.onerror = finish;
+        try { a.currentTime = 0; } catch (e2) {}
+        const p = a.play();
+        if (p && p.catch) p.catch(finish);
+        setTimeout(finish, 30000);
+      } catch (e2) { finish(); }
+    }
   });
 }
 
@@ -145,6 +178,7 @@ async function getCharacter(id) {
 
 /** 初见仪式：穿越 → 听见声音 → 看见画面 → 打招呼 → 进入对话 */
 async function startMeetingRitual(characterId) {
+  ensureRitualAudio(); // 手势内激活音频，后续播放不受限制
   let char = null;
   try { char = await getCharacter(characterId); } catch (e) {}
   const name = char ? char.name : 'TA';
@@ -205,6 +239,7 @@ function enterChat(characterId) {
 
 /** 告别仪式：告别语 → 反向穿越 → 摄像头回到现实 */
 async function startFarewellRitual(characterId) {
+  ensureRitualAudio(); // 手势内激活音频
   let char = null;
   try { char = await getCharacter(characterId); } catch (e) {}
   const name = char ? char.name : 'TA';
