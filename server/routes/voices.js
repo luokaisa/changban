@@ -20,6 +20,7 @@ function checkOwnership(characterId, userId) {
   const character = chars[characterId];
   if (!character) return { status: 404, error: '角色不存在' };
   if (character.userId !== userId) return { status: 403, error: '无权操作该角色' };
+  if (character.disabled) return { status: 403, error: '该角色已被下架' };
   return { character, chars };
 }
 
@@ -127,6 +128,11 @@ router.post('/clone/:characterId', upload.single('audio'), async (req, res) => {
     const { characterId } = req.params;
     const owned = checkOwnership(characterId, req.user.userId);
     if (owned.error) return res.status(owned.status).json({ error: owned.error });
+    // 合规：声音克隆须单独同意（声纹为敏感个人信息，且会传输至境外服务商处理）
+    const vc = req.body.voiceConsent;
+    if (vc !== true && vc !== 'true') {
+      return res.status(403).json({ error: '请先阅读并同意声音克隆须知', needVoiceConsent: true });
+    }
     const segmentIndex = req.body.segmentIndex;
     let audioBuffer;
 
@@ -153,6 +159,7 @@ router.post('/clone/:characterId', upload.single('audio'), async (req, res) => {
     const chars = storage.read('characters');
     if (chars[characterId]) {
       chars[characterId].voiceId = voiceId;
+      chars[characterId].voiceConsentAt = Date.now(); // 声音克隆单独同意时间（合规留存）
       delete chars[characterId].segments;
       storage.write('characters', chars);
     }

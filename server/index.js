@@ -35,6 +35,7 @@ app.use('/api/avatar', requireAuth, require('./routes/avatar'));
 app.use('/api/voices', requireAuth, require('./routes/voices'));
 app.use('/api/chat', requireAuth, require('./routes/chat'));
 app.use('/api/pay', requireAuth, require('./routes/pay'));
+app.use('/api/reports', requireAuth, require('./routes/reports'));
 
 // SPA 回退
 app.get('*', (req, res) => {

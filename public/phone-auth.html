@@ -19,6 +19,18 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .error{color:#ef4444}.success{color:#22c55e}.info{color:#a78bfa}
 .step{display:none}.step.active{display:block}
 a{display:block;margin-top:16px;color:#64748b;font-size:13px;text-decoration:none}
+.notice-row{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#94a3b8;margin:4px 0 12px;text-align:left;cursor:pointer;line-height:1.6}
+.notice-row input{width:auto;margin:3px 0 0;accent-color:#7c3aed;letter-spacing:0}
+.notice-row a{display:inline;color:#a78bfa;margin:0;font-size:13px}
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:99;padding:20px}
+.modal-mask.show{display:flex}
+.modal{background:#1a1a2e;border:1px solid #334155;border-radius:14px;max-width:360px;width:100%;max-height:80vh;display:flex;flex-direction:column}
+.modal-head{padding:16px;font-weight:700;font-size:16px;border-bottom:1px solid #334155}
+.modal-body{padding:16px;overflow-y:auto;font-size:13px;color:#cbd5e1;line-height:1.8;text-align:left}
+.modal-body ol{padding-left:20px}
+.modal-body li{margin-bottom:8px}
+.modal-foot{padding:12px 16px;border-top:1px solid #334155;display:flex;gap:10px}
+.modal-foot button{margin:0}
 </style>
 </head>
 <body>
@@ -50,11 +62,38 @@ a{display:block;margin-top:16px;color:#64748b;font-size:13px;text-decoration:non
     <input id="regRealName" type="text" maxlength="10" placeholder="真实姓名" style="letter-spacing:0" autocomplete="name">
     <input id="regIdcard" type="text" maxlength="18" placeholder="身份证号" style="letter-spacing:0" inputmode="numeric">
     <p style="font-size:12px;color:#64748b;margin:-6px 0 12px">仅用于实名核验，身份证号原文不会被存储<br>未满18岁将无法完成注册</p>
+    <label class="notice-row">
+      <input type="checkbox" id="noticeCheck">
+      <span>我已阅读并同意<a href="javascript:void(0)" onclick="showNotice(event)">《常伴使用须知》</a></span>
+    </label>
     <button id="verifyIdBtn" onclick="verifyRealname()">验证并完成注册</button>
   </div>
 
   <div id="msg"></div>
   <a href="/">← 使用密码登录</a>
+</div>
+
+<!-- 使用须知弹窗 -->
+<div class="modal-mask" id="noticeModal">
+  <div class="modal">
+    <div class="modal-head">📜 常伴使用须知</div>
+    <div class="modal-body">
+      <ol>
+        <li><b>你在与 AI 对话</b>：这里的"亲人"是 AI 纪念角色，不是真人；语音为 AI 合成。</li>
+        <li><b>年满 18 岁</b>方可使用本服务。</li>
+        <li><b>逝者授权</b>：创建逝者纪念角色，须确认已获得逝者生前意愿或全体近亲属一致同意；如声明不实，责任由你承担。</li>
+        <li><b>声音是敏感个人信息</b>：声音克隆与语音合成会将你的录音/文字传输至境外服务商（ElevenLabs，美国）处理，克隆前需另行单独同意。</li>
+        <li><b>理性使用</b>：连续使用会有休息提醒；AI 不能替代现实生活，也不能替代专业心理咨询。</li>
+        <li><b>举报与下架</b>：如发现违规内容可举报；接到权利人异议，我们会下架相关角色。</li>
+        <li><b>你的数据</b>：可随时导出个人数据、删除账号及相关数据。</li>
+      </ol>
+      <p style="color:#64748b;font-size:12px">完整《用户协议》《隐私政策》请以律师审核版本为准。</p>
+    </div>
+    <div class="modal-foot">
+      <button onclick="closeNotice()">关闭</button>
+      <button onclick="acceptNotice()">已阅读，同意</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -117,6 +156,7 @@ function verifyRealname(){
   if(rn.length<2) return msg('❌ 请填写真实姓名','error');
   if(!id) return msg('❌ 请填写身份证号','error');
   if(!pendingReg) return msg('❌ 请先完成上一步','error');
+  if(!document.getElementById('noticeCheck').checked) return msg('❌ 请先阅读并同意《常伴使用须知》','error');
 
   var btn=document.getElementById('verifyIdBtn');
   btn.disabled=true;
@@ -125,7 +165,7 @@ function verifyRealname(){
     if(d.error){msg('❌ '+d.error,'error');btn.disabled=false;return;}
     // 实名通过，完成注册
     msg('✅ 实名通过，注册中...','success');
-    ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:pendingReg.username,password:pendingReg.password},function(d2){
+    ajax('POST','/api/auth/register-by-phone',{verifyToken:verifyToken,username:pendingReg.username,password:pendingReg.password,noticeAccepted:true},function(d2){
       if(d2.error){msg('❌ '+d2.error,'error');btn.disabled=false;return;}
       localStorage.setItem('auth_token',d2.token);
       msg('✅ 注册成功！','success');
@@ -159,6 +199,10 @@ function ajax(method,url,data,ok,fail){
 }
 
 function msg(t,c){var m=document.getElementById('msg');m.textContent=t;m.className=c||'';}
+
+function showNotice(e){if(e)e.stopPropagation();document.getElementById('noticeModal').classList.add('show');}
+function closeNotice(){document.getElementById('noticeModal').classList.remove('show');}
+function acceptNotice(){document.getElementById('noticeCheck').checked=true;closeNotice();}
 </script>
 </body>
 </html>

@@ -24,6 +24,7 @@ async function checkAuth() {
     currentUser = data.user;
     hideLogin();
     updateVerifyStatus();
+    await checkNotice();
     return true;
   } catch(e) {
     localStorage.removeItem('auth_token');
@@ -60,6 +61,7 @@ async function doLogin(e) {
     localStorage.setItem('auth_token', data.token);
     currentUser = data.user;
     hideLogin();
+    await checkNotice();
   } catch (err) {
     document.getElementById('loginError').textContent = err.message;
   }
@@ -93,6 +95,7 @@ function navigate(page, param) {
 
   if (page === 'home') loadCharacters();
   if (page === 'edit' && param) loadEditForm(param);
+  if (page === 'settings') loadAdminReports();
   if (page === 'chat' && param) { startChat(param); startUsageReminder(); }
   else stopUsageReminder();
 }
@@ -364,6 +367,7 @@ async function uploadAndSplit(file) {
 function playSegment(url) { var a = new Audio(url); a.play().catch(function() {}); }
 
 async function cloneSegment(index) {
+  if (!voiceConsentGiven) return ensureVoiceConsent(function() { cloneSegment(index); });
   var id = document.getElementById('editId').value;
   var status = document.getElementById('voiceStatus');
   status.textContent = '\u23F3 \u6B63\u5728\u514B\u9686\u58F0\u97F3...';
@@ -371,7 +375,7 @@ async function cloneSegment(index) {
     var res = await fetch('/api/voices/clone/' + id, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': getToken() },
-      body: JSON.stringify({ name: document.getElementById('editName').value || '\u6211\u7684\u4EB2\u4EBA', segmentIndex: index }),
+      body: JSON.stringify({ name: document.getElementById('editName').value || '\u6211\u7684\u4EB2\u4EBA', segmentIndex: index, voiceConsent: true }),
     });
     var data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -427,6 +431,7 @@ function onVoiceFileSelectedOld(e) {
 }
 
 async function cloneVoice() {
+  if (!voiceConsentGiven) return ensureVoiceConsent(cloneVoice);
   var file = document.getElementById('voiceSample').files[0];
   var id = document.getElementById('editId').value;
   if (!id) return toast('\u8BF7\u5148\u4FDD\u5B58\u89D2\u8272\u4FE1\u606F');
@@ -437,6 +442,7 @@ async function cloneVoice() {
   var fd = new FormData();
   fd.append('name', document.getElementById('editName').value || '\u6211\u7684\u4EB2\u4EBA');
   fd.append('audio', file);
+  fd.append('voiceConsent', 'true');
   try {
     var res = await fetch('/api/voices/clone/' + id, { method: 'POST', headers: { 'x-auth-token': getToken() }, body: fd });
     var data = await res.json();
@@ -908,6 +914,141 @@ async function deleteMyAccount() {
     toast('账号已删除');
     setTimeout(function() { window.location.href = '/'; }, 1000);
   } catch (err) { toast('❌ ' + err.message); }
+}
+
+// ===== 合规：使用须知 / 声音同意 / 举报 =====
+var NOTICE_ITEMS = [
+  '<b>你在与 AI 对话</b>：这里的"亲人"是 AI 纪念角色，不是真人；语音为 AI 合成。',
+  '<b>年满 18 岁</b>方可使用本服务。',
+  '<b>逝者授权</b>：创建逝者纪念角色，须确认已获得逝者生前意愿或全体近亲属一致同意；如声明不实，责任由你承担。',
+  '<b>声音是敏感个人信息</b>：声音克隆与语音合成会将你的录音/文字传输至境外服务商（ElevenLabs，美国）处理，克隆前需另行单独同意。',
+  '<b>理性使用</b>：连续使用会有休息提醒；AI 不能替代现实生活，也不能替代专业心理咨询。',
+  '<b>举报与下架</b>：如发现违规内容可举报；接到权利人异议，我们会下架相关角色。',
+  '<b>你的数据</b>：可随时导出个人数据、删除账号及相关数据。'
+];
+function noticeHTML() {
+  return '<ol style="padding-left:20px;line-height:1.8;font-size:13px;color:#cbd5e1;text-align:left">' +
+    NOTICE_ITEMS.map(function(t) { return '<li style="margin-bottom:8px">' + t + '</li>'; }).join('') + '</ol>';
+}
+
+// 通用弹窗
+function showComplianceModal(title, bodyHTML, buttons, blocking) {
+  closeComplianceModal();
+  var mask = document.createElement('div');
+  mask.id = 'complianceModal';
+  mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#1a1a2e;border:1px solid #334155;border-radius:14px;max-width:380px;width:100%;max-height:82vh;display:flex;flex-direction:column';
+  var head = document.createElement('div');
+  head.style.cssText = 'padding:14px 16px;font-weight:700;font-size:16px;border-bottom:1px solid #334155';
+  head.textContent = title;
+  var body = document.createElement('div');
+  body.style.cssText = 'padding:14px 16px;overflow-y:auto';
+  body.innerHTML = bodyHTML;
+  var foot = document.createElement('div');
+  foot.style.cssText = 'padding:12px 16px;border-top:1px solid #334155;display:flex;gap:10px';
+  (buttons || [{ text: '关闭' }]).forEach(function(b) {
+    var btn = document.createElement('button');
+    btn.textContent = b.text;
+    btn.className = b.primary ? 'btn-primary' : 'btn-secondary';
+    btn.style.cssText = 'flex:1;padding:12px;border-radius:10px;font-size:15px;cursor:pointer;border:none;' +
+      (b.primary ? 'background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;font-weight:600;' : 'background:#1e293b;color:#cbd5e1;');
+    btn.onclick = function() { closeComplianceModal(); if (b.fn) b.fn(); };
+    foot.appendChild(btn);
+  });
+  box.appendChild(head); box.appendChild(body); box.appendChild(foot);
+  mask.appendChild(box);
+  if (!blocking) mask.addEventListener('click', function(e) { if (e.target === mask) closeComplianceModal(); });
+  document.body.appendChild(mask);
+}
+function closeComplianceModal() {
+  var m = document.getElementById('complianceModal');
+  if (m) m.remove();
+}
+
+// --- 老用户补确认《使用须知》（阻塞式） ---
+async function checkNotice() {
+  if (!currentUser || !currentUser.needNotice) return;
+  showComplianceModal('📜 常伴使用须知', noticeHTML() + '<p style="font-size:12px;color:#64748b">继续使用即表示你已阅读并同意上述须知。</p>', [
+    { text: '已阅读，同意', primary: true, fn: async function() {
+      try {
+        await api('/api/auth/accept-notice', { method: 'POST' });
+        currentUser.needNotice = false;
+      } catch (e) { toast('❌ 确认失败，请重试'); checkNotice(); }
+    } }
+  ], true);
+}
+
+// --- 声音克隆单独同意 ---
+var VOICE_CONSENT_HTML = '<ol style="padding-left:20px;line-height:1.8;font-size:13px;color:#cbd5e1;text-align:left">' +
+  '<li style="margin-bottom:8px"><b>声纹是敏感个人信息</b>：克隆会提取并存储说话人的声纹特征。</li>' +
+  '<li style="margin-bottom:8px"><b>数据会出境</b>：克隆与合成由境外服务商 ElevenLabs（美国）处理，你的录音将传输至境外。</li>' +
+  '<li style="margin-bottom:8px"><b>来源承诺</b>：你保证这段录音来自你本人，或已获得逝者全体近亲属一致同意；虚假声明责任自负。</li>' +
+  '<li style="margin-bottom:8px">删除角色时，云端声音将同步删除。</li></ol>';
+var voiceConsentGiven = false;
+function ensureVoiceConsent(next) {
+  showComplianceModal('🎤 声音克隆须知', VOICE_CONSENT_HTML, [
+    { text: '取消' },
+    { text: '已阅读，同意并继续', primary: true, fn: function() { voiceConsentGiven = true; next(); } }
+  ]);
+}
+
+// --- 举报角色 ---
+function openReport() {
+  if (!currentCharId) return toast('请先进入一个对话');
+  var body = '<p style="font-size:13px;color:#94a3b8;margin-bottom:8px">举报对象：' + escapeHtml(currentCharData ? currentCharData.name : '') + '</p>' +
+    '<select id="reportReason" style="width:100%;padding:10px;border-radius:8px;background:#0f0f1a;color:#e2e8f0;border:1px solid #334155;margin-bottom:8px">' +
+    ['未经授权', '冒充亲属', '有害内容', '诈骗嫌疑', '其他'].map(function(r) { return '<option>' + r + '</option>'; }).join('') + '</select>' +
+    '<textarea id="reportDetail" placeholder="补充说明（可选）" style="width:100%;padding:10px;border-radius:8px;background:#0f0f1a;color:#e2e8f0;border:1px solid #334155;min-height:60px;font-size:13px"></textarea>';
+  showComplianceModal('🚩 举报', body, [
+    { text: '取消' },
+    { text: '提交举报', primary: true, fn: async function() {
+      var reason = document.getElementById('reportReason').value;
+      var detail = document.getElementById('reportDetail').value;
+      try {
+        await api('/api/reports', { method: 'POST', body: JSON.stringify({ characterId: currentCharId, reason: reason, detail: detail }) });
+        toast('✅ 举报已提交，我们会尽快处理');
+      } catch (e) { toast('❌ ' + e.message); }
+    } }
+  ]);
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+}
+
+// --- 管理员：举报列表 ---
+async function loadAdminReports() {
+  var sec = document.getElementById('adminReportsSection');
+  if (!sec) return;
+  if (!currentUser || currentUser.role !== 'admin') { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  var listEl = document.getElementById('reportsList');
+  try {
+    var reports = await api('/api/reports');
+    if (!reports.length) { listEl.innerHTML = '<p class="hint">暂无举报</p>'; return; }
+    listEl.innerHTML = reports.map(function(r) {
+      var st = r.status === 'pending' ? '<span style="color:#f59e0b">待处理</span>' : (r.status === 'takedown' ? '<span style="color:#ef4444">已下架</span>' : '<span style="color:#64748b">已驳回</span>');
+      var btns = r.status === 'pending'
+        ? '<button class="btn-secondary" style="padding:4px 10px;font-size:12px" onclick="handleReport(\'' + r.id + '\',\'dismiss\')">驳回</button> ' +
+          '<button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="handleReport(\'' + r.id + '\',\'takedown\')">下架角色</button>'
+        : '';
+      return '<div style="border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px">' +
+        '<div><b>' + escapeHtml(r.characterName) + '</b> · ' + escapeHtml(r.reason) + ' · ' + st + '</div>' +
+        '<div style="color:#94a3b8;margin:4px 0">举报人：' + escapeHtml(r.reporterName) + ' · ' + new Date(r.createdAt).toLocaleString() + '</div>' +
+        (r.detail ? '<div style="color:#cbd5e1">' + escapeHtml(r.detail) + '</div>' : '') +
+        (r.note ? '<div style="color:#64748b">备注：' + escapeHtml(r.note) + '</div>' : '') +
+        (btns ? '<div style="margin-top:8px">' + btns + '</div>' : '') + '</div>';
+    }).join('');
+  } catch (e) { listEl.innerHTML = '<p class="hint">加载失败</p>'; }
+}
+async function handleReport(id, action) {
+  var note = action === 'takedown' ? prompt('下架原因备注（可选）：', '') : '';
+  if (note === null) return;
+  try {
+    await api('/api/reports/' + id + '/handle', { method: 'POST', body: JSON.stringify({ action: action, note: note || '' }) });
+    toast(action === 'takedown' ? '✅ 角色已下架' : '✅ 已驳回');
+    loadAdminReports();
+  } catch (e) { toast('❌ ' + e.message); }
 }
 
 // ===== 初始化 =====

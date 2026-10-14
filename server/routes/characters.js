@@ -9,7 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 router.get('/', (req, res) => {
   const chars = storage.read('characters');
   const list = Object.entries(chars)
-    .filter(([_, c]) => c.userId === req.user.userId)
+    .filter(([_, c]) => c.userId === req.user.userId && !c.disabled)
     .map(([id, c]) => {
       const comp = memories.completeness(c);
       return {
@@ -65,6 +65,7 @@ router.get('/:id', (req, res) => {
   const char = chars[req.params.id];
   if (!char) return res.status(404).json({ error: '角色不存在' });
   if (char.userId !== req.user.userId) return res.status(403).json({ error: '无权访问该角色' });
+  if (char.disabled) return res.status(403).json({ error: '该角色已被下架', disabled: true });
   res.json({ id: req.params.id, ...char });
 });
 

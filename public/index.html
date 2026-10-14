@@ -187,6 +187,7 @@
         <div style="display:flex;gap:2px;flex-shrink:0">
           <button class="icon-btn" onclick="cycleFontSize()" title="切换字号">🅰️</button>
           <button class="icon-btn" id="autoVoiceBtn" onclick="toggleAutoVoice()" title="自动播放语音">🔊</button>
+          <button class="icon-btn" onclick="openReport()" title="举报">🚩</button>
           <button class="icon-btn" onclick="clearChat()">🗑️</button>
         </div>
       </div>
@@ -281,6 +282,11 @@
         </div>
         <button class="btn-primary" onclick="verifyIdMe()" style="width:100%">提交认证</button>
         <p class="hint" style="margin-top:8px">仅用于实名核验，身份证号原文不会被存储</p>
+      </div>
+
+      <div class="settings-section" id="adminReportsSection" style="display:none">
+        <h3>🛡️ 举报处理（管理员）</h3>
+        <div id="reportsList"><p class="hint">加载中...</p></div>
       </div>
 
       <div class="settings-section">

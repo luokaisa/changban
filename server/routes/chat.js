@@ -264,7 +264,7 @@ router.post('/:characterId', async (req, res) => {
 
     const chars = storage.read('characters');
     const character = chars[req.params.characterId];
-    if (!character) return res.status(404).json({ error: '角色不存在' });
+    if (!character || character.disabled) return res.status(404).json({ error: '角色不存在' });
     if (character.userId !== req.user.userId) return res.status(403).json({ error: '无权使用该角色' });
 
     const userId = req.user.userId;

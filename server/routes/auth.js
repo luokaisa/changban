@@ -5,6 +5,9 @@ const phoneAuth = require('../services/phoneAuth');
 
 const SCHEME_CODE = 'FC220000013025071';
 
+// 合规：《常伴使用须知》版本号（升级后需用户重新确认）
+const NOTICE_VERSION = 1;
+
 // ===== 获取 H5 SDK 初始化令牌 =====
 const h5Token = require('../services/h5Token');
 
@@ -237,6 +240,10 @@ router.post('/register-by-phone', (req, res) => {
   if (!verifyToken || !username || !password) return res.status(400).json({ error: '参数不完整' });
   if (password.length < 4) return res.status(400).json({ error: '密码至少4位' });
   if (username.length < 2) return res.status(400).json({ error: '用户名至少2个字符' });
+  // 合规：必须阅读并同意《常伴使用须知》
+  if (req.body.noticeAccepted !== true) {
+    return res.status(403).json({ error: '请先阅读并同意《常伴使用须知》' });
+  }
 
   // 合规：必须先完成实名认证；年龄以证件解析为准
   const vf = path.join(__dirname, '..', '..', 'data', 'verify-tokens.json');
@@ -273,6 +280,8 @@ router.post('/register-by-phone', (req, res) => {
     users[username].idMasked = record.idMasked;
     users[username].idHash = record.idHash;
     users[username].idVerifiedAt = record.idVerifiedAt;
+    users[username].noticeAt = Date.now(); // 《使用须知》确认时间（合规留存）
+    users[username].noticeVersion = NOTICE_VERSION;
     storage.write('users', users);
   }
   
@@ -380,7 +389,23 @@ router.get('/me', (req, res) => {
   if (!session) return res.status(401).json({ error: '登录已过期' });
   const storage = require('../services/storage');
   const u = storage.read('users')[session.username] || {};
-  res.json({ user: { id: session.userId, username: session.username, role: session.role, verified: u.verified === true, realName: u.realName || '' } });
+  res.json({ user: { id: session.userId, username: session.username, role: session.role, verified: u.verified === true, realName: u.realName || '', needNotice: !u.noticeAt || u.noticeVersion !== NOTICE_VERSION } });
+});
+
+// ===== 合规：老用户补确认《使用须知》 =====
+router.post('/accept-notice', (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (!token) return res.status(401).json({ error: '未登录' });
+  const session = auth.verifyToken(token);
+  if (!session) return res.status(401).json({ error: '登录已过期' });
+  const storage = require('../services/storage');
+  const users = storage.read('users');
+  const u = users[session.username];
+  if (!u) return res.status(404).json({ error: '用户不存在' });
+  u.noticeAt = Date.now();
+  u.noticeVersion = NOTICE_VERSION;
+  storage.write('users', users);
+  res.json({ ok: true });
 });
 
 // ===== 合规：导出个人数据 =====

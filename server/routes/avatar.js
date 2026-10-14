@@ -28,6 +28,14 @@ router.post('/:id', avatarUpload.single('avatar'), (req, res) => {
     if (req.file) fs.unlinkSync(req.file.path);
     return res.status(404).json({ error: '角色不存在' });
   }
+  if (char.disabled) {
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(403).json({ error: '该角色已被下架' });
+  }
+  if (char.userId !== req.user.userId) {
+    if (req.file) fs.unlinkSync(req.file.path);
+    return res.status(403).json({ error: '无权操作该角色' });
+  }
 
   const ext = path.extname(req.file.originalname);
   const filename = `avatar_${req.params.id}${ext}`;
