@@ -287,8 +287,12 @@ async function updateCharacter(e) {
 
 async function deleteCharacter() {
   var id = document.getElementById('editId').value;
-  if (!confirm('\u786E\u5B9A\u5220\u9664\uFF1F')) return;
-  try { await api('/api/characters/' + id, { method: 'DELETE' }); toast('\u89D2\u8272\u5DF2\u5220\u9664'); navigate('home'); }
+  if (!confirm('确定删除？云端克隆声音将同步删除，不可恢复。')) return;
+  try {
+    var data = await api('/api/characters/' + id, { method: 'DELETE' });
+    toast(data.cloudVoiceDeleted === false ? '⚠️ 角色已删除，但云端声音删除失败，请联系客服' : '✅ 角色及云端声音已删除');
+    navigate('home');
+  }
   catch (err) { toast('\u274C ' + err.message); }
 }
 
@@ -904,14 +908,15 @@ async function exportMyData() {
 }
 
 async function deleteMyAccount() {
-  if (!confirm('确定删除账号及全部数据吗？此操作不可恢复！')) return;
-  if (!confirm('再次确认：所有角色、对话记录都将被永久删除，继续吗？')) return;
+  if (!confirm('确定删除账号及全部数据吗？云端克隆声音将同步删除，此操作不可恢复！')) return;
+  if (!confirm('再次确认：所有角色、对话记录、云端声音都将被永久删除，继续吗？')) return;
   try {
     var res = await fetch('/api/auth/account', { method: 'DELETE', headers: { 'x-auth-token': getToken() } });
     var data = await res.json();
     if (!res.ok) throw new Error(data.error);
     localStorage.removeItem('auth_token');
-    toast('账号已删除');
+    var failed = (data.cloudVoices || []).filter(function(r) { return !r.deleted; });
+    toast(failed.length ? '⚠️ 账号已删除，但 ' + failed.length + ' 个云端声音删除失败，请联系客服' : '账号及云端声音已删除');
     setTimeout(function() { window.location.href = '/'; }, 1000);
   } catch (err) { toast('❌ ' + err.message); }
 }
@@ -1030,7 +1035,7 @@ async function loadAdminReports() {
       var st = r.status === 'pending' ? '<span style="color:#f59e0b">待处理</span>' : (r.status === 'takedown' ? '<span style="color:#ef4444">已下架</span>' : '<span style="color:#64748b">已驳回</span>');
       var btns = r.status === 'pending'
         ? '<button class="btn-secondary" style="padding:4px 10px;font-size:12px" onclick="handleReport(\'' + r.id + '\',\'dismiss\')">驳回</button> ' +
-          '<button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="handleReport(\'' + r.id + '\',\'takedown\')">下架角色</button>'
+          '<button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="handleReport(\'' + r.id + '\',\'takedown\')" title="下架角色并同步删除云端声音，不可恢复">下架角色</button>'
         : '';
       return '<div style="border:1px solid #334155;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px">' +
         '<div><b>' + escapeHtml(r.characterName) + '</b> · ' + escapeHtml(r.reason) + ' · ' + st + '</div>' +

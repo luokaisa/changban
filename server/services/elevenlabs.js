@@ -204,4 +204,20 @@ async function textToSpeech(text, voiceId, apiKey) {
   });
 }
 
-module.exports = { cloneVoice, textToSpeech };
+/**
+ * 删除云端克隆声音（用户删角色/删号/下架时调用）
+ * 成功 resolve true；voice 不存在也视为成功（幂等）
+ */
+async function deleteVoice(voiceId, apiKey) {
+  if (!voiceId) return true;
+  try {
+    await apiRequest('DELETE', '/v1/voices/' + encodeURIComponent(voiceId), null, apiKey);
+    return true;
+  } catch (err) {
+    // 已不存在视为成功，避免残留记录卡住删除流程
+    if (/not\s*found|404/i.test(err.message)) return true;
+    throw err;
+  }
+}
+
+module.exports = { cloneVoice, textToSpeech, deleteVoice };

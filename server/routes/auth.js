@@ -437,16 +437,31 @@ router.get('/export', (req, res) => {
 });
 
 // ===== 合规：删除账号及全部个人数据（不可恢复） =====
-router.delete('/account', (req, res) => {
+router.delete('/account', async (req, res) => {
   const token = req.headers['x-auth-token'];
   if (!token) return res.status(401).json({ error: '未登录' });
   const session = auth.verifyToken(token);
   if (!session) return res.status(401).json({ error: '登录已过期' });
 
   const storage = require('../services/storage');
+  const elevenlabs = require('../services/elevenlabs');
   const users = storage.read('users');
   const chars = storage.read('characters');
   const conversations = storage.read('conversations');
+
+  // 合规：先同步删除该用户所有角色的 ElevenLabs 云端声音（尽力而为）
+  const cloudResults = [];
+  for (const [id, c] of Object.entries(chars)) {
+    if (c.userId === session.userId && c.voiceId) {
+      try {
+        await elevenlabs.deleteVoice(c.voiceId);
+        cloudResults.push({ characterId: id, deleted: true });
+      } catch (err) {
+        console.error('[Delete] 云端声音删除失败:', c.voiceId, err.message);
+        cloudResults.push({ characterId: id, deleted: false, error: err.message });
+      }
+    }
+  }
 
   // 删角色
   for (const [id, c] of Object.entries(chars)) {
@@ -463,8 +478,7 @@ router.delete('/account', (req, res) => {
   storage.write('users', users);
   auth.logout(token);
 
-  // 注：ElevenLabs 侧克隆声音需在 ElevenLabs 控制台另行删除，见设置页说明
-  res.json({ success: true });
+  res.json({ success: true, cloudVoices: cloudResults });
 });
 
 module.exports = router;

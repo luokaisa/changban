@@ -53,8 +53,8 @@ router.get('/', (req, res) => {
   res.json(list);
 });
 
-// 处理举报（管理员）：dismiss 驳回 / takedown 下架
-router.post('/:id/handle', (req, res) => {
+// 处理举报（管理员）：dismiss 驳回 / takedown 下架（下架同步删除云端声音）
+router.post('/:id/handle', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: '无权访问' });
   const { action, note } = req.body;
   if (!['dismiss', 'takedown'].includes(action)) return res.status(400).json({ error: '处理动作无效' });
@@ -76,6 +76,18 @@ router.post('/:id/handle', (req, res) => {
       c.disabled = true;
       c.disabledAt = Date.now();
       c.disabledReason = r.reason;
+      // 有争议的声纹不留在境外服务器：同步删除云端声音（尽力而为）
+      if (c.voiceId) {
+        try {
+          const elevenlabs = require('../services/elevenlabs');
+          await elevenlabs.deleteVoice(c.voiceId);
+          r.note = (r.note ? r.note + '；' : '') + '云端声音已同步删除';
+          c.voiceId = '';
+        } catch (err) {
+          console.error('[Takedown] 云端声音删除失败:', c.voiceId, err.message);
+          r.note = (r.note ? r.note + '；' : '') + '云端声音删除失败：' + err.message;
+        }
+      }
       storage.write('characters', chars);
     }
   }

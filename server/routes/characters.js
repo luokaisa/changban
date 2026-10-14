@@ -3,6 +3,7 @@ const router = express.Router();
 const storage = require('../services/storage');
 const memories = require('../services/memories');
 const wallet = require('../services/wallet');
+const elevenlabs = require('../services/elevenlabs');
 const { v4: uuidv4 } = require('uuid');
 
 /** 获取当前用户的角色列表（含记忆点/完整度） */
@@ -128,14 +129,29 @@ router.put('/:id', (req, res) => {
   res.json(char);
 });
 
-/** 删除角色（仅限拥有者） */
-router.delete('/:id', (req, res) => {
+/** 删除角色（仅限拥有者）：先删 ElevenLabs 云端声音，再删本地数据 */
+router.delete('/:id', async (req, res) => {
   const chars = storage.read('characters');
-  if (!chars[req.params.id]) return res.status(404).json({ error: '角色不存在' });
-  if (chars[req.params.id].userId !== req.user.userId) return res.status(403).json({ error: '无权删除该角色' });
+  const char = chars[req.params.id];
+  if (!char) return res.status(404).json({ error: '角色不存在' });
+  if (char.userId !== req.user.userId) return res.status(403).json({ error: '无权删除该角色' });
+
+  // 合规：同步删除境外云端声音（尽力而为；失败不阻塞本地删除，但如实返回）
+  let cloudDeleted = true;
+  let cloudError = '';
+  if (char.voiceId) {
+    try {
+      await elevenlabs.deleteVoice(char.voiceId);
+    } catch (err) {
+      cloudDeleted = false;
+      cloudError = err.message;
+      console.error('[Delete] 云端声音删除失败:', char.voiceId, err.message);
+    }
+  }
+
   delete chars[req.params.id];
   storage.write('characters', chars);
-  res.json({ success: true });
+  res.json({ success: true, cloudVoiceDeleted: cloudDeleted, cloudError });
 });
 
 function generatePrompt(char) {
