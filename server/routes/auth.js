@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../services/auth');
 const phoneAuth = require('../services/phoneAuth');
+const config = require('../config');
 
 const SCHEME_CODE = 'FC220000013025071';
 
@@ -294,7 +295,7 @@ router.post('/register-by-phone', (req, res) => {
 
 // ===== 状态检查 =====
 router.get('/status', (req, res) => {
-  res.json({ hasUsers: auth.hasAnyUser() });
+  res.json({ hasUsers: auth.hasAnyUser(), devRegister: config.devRegister === true });
 });
 
 // ===== 合规：未成年人禁入（虚拟亲属服务不得向未满18岁提供） =====

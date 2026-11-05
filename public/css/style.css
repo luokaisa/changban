@@ -806,6 +806,79 @@ form { display: flex; flex-direction: column; gap: 16px; }
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  margin: -8px 0 14px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+}
+.auth-tab.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--purple), var(--pink));
+}
+.auth-form[hidden],
+.auth-tabs[hidden],
+.auth-divider[hidden],
+.auth-phone-primary[hidden],
+.auth-phone-minor[hidden],
+.dev-register-note[hidden] { display: none !important; }
+.auth-phone-primary {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  padding: 14px;
+  border-radius: 10px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.auth-phone-minor {
+  color: var(--purple-light);
+  font-size: 12px;
+  text-decoration: underline;
+  margin: 0 4px;
+}
+.dev-register-note {
+  width: 100%;
+  max-width: 320px;
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.dev-register-note button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+}
+.dev-register-badge {
+  align-self: flex-start;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #f5e9d0;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 8px;
+}
+.auth-form input[type="date"] { color-scheme: dark; }
 
 .code-row {
   display: flex;

@@ -7,7 +7,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕊️</text></svg>">
   <title>常伴</title>
-  <link rel="stylesheet" href="/css/style.css?v=5">
+  <link rel="stylesheet" href="/css/style.css?v=6">
 </head>
 <body>
   <div id="app">
@@ -16,25 +16,52 @@
       <div class="auth-container">
         <div class="auth-logo">🕊️</div>
         <h2 class="auth-title">常伴</h2>
-        <p class="auth-desc">登录后继续</p>
+        <p class="auth-desc" id="authDesc">登录后继续</p>
 
-        <!-- 登录 -->
+        <!-- 临时测试入口：默认随 DEV_REGISTER / 非 production 显示。正式产品仍强制手机号注册。 -->
+        <div id="devRegisterTabs" class="auth-tabs" hidden>
+          <button type="button" id="authTabLogin" class="auth-tab active" onclick="showAuthTab('login')">登录</button>
+          <button type="button" id="authTabRegister" class="auth-tab" onclick="showAuthTab('register')">测试注册</button>
+        </div>
+        <p id="devRegisterNote" class="dev-register-note" hidden>测试入口，不替代手机号注册。<a id="phoneAuthSecondary" href="/phone-auth.html" class="auth-phone-minor" hidden>手机号注册</a><button type="button" onclick="disableDevRegister()">关闭</button></p>
+
+        <!-- 登录：手机验证成功后设置的用户名和密码 -->
         <form id="loginForm" onsubmit="doLogin(event)" class="auth-form">
           <div class="form-group">
-            <input type="text" id="loginUser" placeholder="用户名" required>
+            <input type="text" id="loginUser" placeholder="用户名" required autocomplete="username">
           </div>
           <div class="form-group">
-            <input type="password" id="loginPass" placeholder="密码" required>
+            <input type="password" id="loginPass" placeholder="密码" required autocomplete="current-password">
           </div>
           <button type="submit" class="btn-primary">登录</button>
           <p id="loginError" class="auth-error"></p>
         </form>
 
+        <!-- 临时测试注册。关闭：?devRegister=0 或 DEV_REGISTER=false -->
+        <form id="registerForm" onsubmit="doRegister(event)" class="auth-form" hidden>
+          <p class="dev-register-badge">测试</p>
+          <p class="hint">临时测试用。正式注册仍走手机号，验证成功后再设置用户名和密码登录。</p>
+          <div class="form-group">
+            <input type="text" id="regUser" placeholder="用户名" required minlength="2" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <input type="password" id="regPass" placeholder="密码（至少4位）" required minlength="4" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <input type="password" id="regPass2" placeholder="确认密码" required minlength="4" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label for="regBirth">生日</label>
+            <input type="date" id="regBirth" required>
+          </div>
+          <p class="hint">需年满18岁</p>
+          <button type="submit" class="btn-primary">测试注册</button>
+          <p id="regError" class="auth-error"></p>
+        </form>
 
-
-        <!-- 手机号注册入口 -->
-        <div class="auth-divider">没有账号？</div>
-        <a href="/phone-auth.html" class="btn-primary" style="display:block;text-align:center;text-decoration:none;padding:14px;border-radius:10px;margin-top:8px">📱 手机号注册</a>
+        <!-- 正式注册入口：手机号。测试入口打开时降为次要链接，链路本身保留。 -->
+        <div class="auth-divider" id="phoneAuthDivider">没有账号？</div>
+        <a id="phoneAuthPrimary" href="/phone-auth.html" class="btn-primary auth-phone-primary">📱 手机号注册</a>
       </div>
     </main>
 
@@ -317,7 +344,7 @@
     <button type="button" class="tunnel-intro-skip" id="tunnelIntroSkip">跳过</button>
   </div>
 
-  <script src="/js/app.js?v=5"></script>
+  <script src="/js/app.js?v=6"></script>
   <script src="/js/ritual.js?v=3"></script>
 </body>
 </html>

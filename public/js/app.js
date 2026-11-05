@@ -58,20 +58,125 @@ async function doLogin(e) {
     });
     var data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    localStorage.setItem('auth_token', data.token);
-    currentUser = data.user;
-    hideLogin();
-    await checkNotice();
+    await enterAfterAuth(data.token, data.user);
   } catch (err) {
     document.getElementById('loginError').textContent = err.message;
   }
 }
 
+// 登录/测试注册成功后同一条路：记下 token，用 /me 补齐须知状态，再进主界面。
+async function enterAfterAuth(token, user) {
+  localStorage.setItem('auth_token', token);
+  currentUser = user || null;
+  try {
+    var res = await fetch('/api/auth/me', { headers: { 'x-auth-token': token } });
+    if (res.ok) {
+      var data = await res.json();
+      if (data.user) currentUser = data.user;
+    }
+  } catch (e) {}
+  hideLogin();
+  updateVerifyStatus();
+  await checkNotice();
+}
+
+// 临时测试注册。正式产品仍强制手机号注册；用户名密码是手机验证成功后自己设置的登录方式。
+// 开关：?devRegister=1 打开，?devRegister=0 关闭（写入 localStorage）；服务端 DEV_REGISTER / 非 production 为默认。
+function captureDevRegisterQuery() {
+  var q = new URLSearchParams(location.search).get('devRegister');
+  if (q === '1' || q === '0') localStorage.setItem('devRegister', q);
+}
+
+function devRegisterEnabled(serverFlag) {
+  var stored = localStorage.getItem('devRegister');
+  if (stored === '1') return true;
+  if (stored === '0') return false;
+  if (serverFlag === true || serverFlag === false) return serverFlag;
+  return true;
+}
+
+function showAuthTab(tab) {
+  var isReg = tab === 'register';
+  var login = document.getElementById('loginForm');
+  var reg = document.getElementById('registerForm');
+  if (login) login.hidden = isReg;
+  if (reg) reg.hidden = !isReg;
+  var tabLogin = document.getElementById('authTabLogin');
+  var tabReg = document.getElementById('authTabRegister');
+  if (tabLogin) tabLogin.classList.toggle('active', !isReg);
+  if (tabReg) tabReg.classList.toggle('active', isReg);
+  var desc = document.getElementById('authDesc');
+  if (desc) desc.textContent = isReg ? '测试注册（非正式）' : '登录后继续';
+}
+
+function applyDevRegisterUi(on) {
+  var tabs = document.getElementById('devRegisterTabs');
+  var note = document.getElementById('devRegisterNote');
+  var primary = document.getElementById('phoneAuthPrimary');
+  var secondary = document.getElementById('phoneAuthSecondary');
+  var divider = document.getElementById('phoneAuthDivider');
+  if (tabs) tabs.hidden = !on;
+  if (note) note.hidden = !on;
+  if (primary) primary.hidden = !!on;
+  if (secondary) secondary.hidden = !on;
+  if (divider) divider.hidden = !!on;
+  if (!on) showAuthTab('login');
+}
+
+function disableDevRegister() {
+  localStorage.setItem('devRegister', '0');
+  location.replace(location.pathname);
+}
+
+function isAdultBirthdate(birthdate) {
+  if (!birthdate || !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return false;
+  var b = new Date(birthdate + 'T00:00:00');
+  if (isNaN(b.getTime()) || b.getTime() > Date.now()) return false;
+  var now = new Date();
+  var age = now.getFullYear() - b.getFullYear();
+  var m = now.getMonth() - b.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  return age >= 18;
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  var username = document.getElementById('regUser').value.trim();
+  var password = document.getElementById('regPass').value;
+  var password2 = document.getElementById('regPass2').value;
+  var birthdate = document.getElementById('regBirth').value;
+  var errEl = document.getElementById('regError');
+  errEl.textContent = '';
+  if (username.length < 2) { errEl.textContent = '用户名至少2个字符'; return; }
+  if (password.length < 4) { errEl.textContent = '密码至少4位'; return; }
+  if (password !== password2) { errEl.textContent = '两次密码不一致'; return; }
+  if (!isAdultBirthdate(birthdate)) { errEl.textContent = '根据法规要求，本服务仅向年满18岁的用户提供'; return; }
+  try {
+    var res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password, birthdate: birthdate }),
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || '注册失败');
+    await enterAfterAuth(data.token, data.user);
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+}
+
 async function initAuth() {
-  var res = await fetch('/api/auth/status');
-  var data = await res.json();
-  if (!data.hasUsers) {
-    // 首次使用，跳转手机号注册
+  captureDevRegisterQuery();
+  var data = { hasUsers: true };
+  try {
+    var res = await fetch('/api/auth/status');
+    if (res.ok) data = await res.json();
+  } catch (e) {}
+  var dev = devRegisterEnabled(data.devRegister);
+  applyDevRegisterUi(dev);
+  if (dev && !data.hasUsers) showAuthTab('register');
+  // 正式产品：还没有用户时强制去手机号注册。测试入口打开时留在主站。
+  if (!dev && data.hasUsers === false) {
     window.location.href = '/phone-auth.html';
   }
 }
