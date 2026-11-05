@@ -1,4 +1,4 @@
-// ===== 时光机仪式：初见穿越 / 告别回到现实 =====
+// ===== 初见问候 / 告别回到现实（无全屏动画） =====
 let ritualSkipped = false;
 let ritualAudioEl = null; // 降级通道的 HTMLAudio
 let ritualStream = null;
@@ -41,89 +41,11 @@ function stopRitualMedia() {
 function skipRitual() {
   ritualSkipped = true;
   stopRitualMedia();
-  const tunnel = document.getElementById('tunnelCanvas');
-  if (tunnel) tunnel.dataset.stop = '1';
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** 时光隧道：粒子 warp；reverse=true 为反向（回到现实） */
-function runTunnel(canvas, reverse, duration) {
-  return new Promise((resolve) => {
-    const ctx = canvas.getContext('2d');
-    const W = (canvas.width = window.innerWidth);
-    const H = (canvas.height = window.innerHeight);
-    const CX = W / 2, CY = H / 2;
-    const N = 240;
-    const parts = [];
-    for (let i = 0; i < N; i++) {
-      parts.push({
-        x: (Math.random() * 2 - 1),
-        y: (Math.random() * 2 - 1),
-        z: Math.random(),
-        px: 0, py: 0,
-      });
-    }
-    const t0 = Date.now();
-    function frame() {
-      if (canvas.dataset.stop === '1' || ritualSkipped) return resolve();
-      if (Date.now() - t0 > duration) return resolve();
-      ctx.fillStyle = 'rgba(5,5,12,0.28)';
-      ctx.fillRect(0, 0, W, H);
-      const scale = Math.min(W, H) * 0.55;
-      for (const p of parts) {
-        p.px = CX + (p.x / p.z) * scale;
-        p.py = CY + (p.y / p.z) * scale;
-        p.z += reverse ? 0.012 : -0.014;
-        if (p.z <= 0.03) { p.z = 1; p.x = Math.random() * 2 - 1; p.y = Math.random() * 2 - 1; }
-        if (p.z > 1.2) { p.z = 0.05; p.x = Math.random() * 2 - 1; p.y = Math.random() * 2 - 1; }
-        const nx = CX + (p.x / p.z) * scale;
-        const ny = CY + (p.y / p.z) * scale;
-        const a = Math.max(0, Math.min(1, 1.1 - p.z));
-        ctx.strokeStyle = `rgba(255,${190 + Math.floor(40 * a)},140,${(a * 0.9).toFixed(2)})`;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.moveTo(p.px, p.py);
-        ctx.lineTo(nx, ny);
-        ctx.stroke();
-      }
-      requestAnimationFrame(frame);
-    }
-    frame();
-  });
-}
-
-/** 时光机音效：噪声扫频 whoosh，由大到小（Web Audio 现场合成，复用手势激活的 context） */
-function playWarpSound(durationMs) {
-  return new Promise(async (resolve) => {
-    try {
-      const ctx = await ensureRitualAudio();
-      const dur = durationMs / 1000;
-      const buffer = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.Q.value = 1.4;
-      filter.frequency.setValueAtTime(180, ctx.currentTime);
-      filter.frequency.exponentialRampToValueAtTime(4200, ctx.currentTime + dur * 0.85);
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 0.25);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-      noise.start();
-      noise.onended = () => { resolve(); };
-      setTimeout(resolve, durationMs + 500);
-    } catch (e) { resolve(); }
-  });
-}
-
-/** 共享 AudioContext：在点击手势内激活，隧道播完（手势过期）后依然有效 */
+/** 共享 AudioContext：在点击手势内激活，之后播放问候语音不受限制 */
 let ritualCtx = null;
 let ritualSrc = null; // 当前播放的 buffer source（可打断）
 
@@ -156,7 +78,7 @@ function playRitualAudio(url) {
       src.start();
       setTimeout(finish, 30000); // 兜底
     } catch (e) {
-      // 降级：HTMLAudio（短隧道/手势有效期内可用）
+      // 降级：HTMLAudio（手势有效期内可用）
       try {
         const a = new Audio(url);
         ritualAudioEl = a;
@@ -176,38 +98,24 @@ async function getCharacter(id) {
   return list.find((c) => c.id === id);
 }
 
-/** 初见仪式：穿越 → 听见声音 → 看见画面 → 打招呼 → 进入对话 */
+/** 重温初见：问候与声音，没有全屏动画 */
 async function startMeetingRitual(characterId) {
-  ensureRitualAudio(); // 手势内激活音频，后续播放不受限制
+  ensureRitualAudio();
   let char = null;
   try { char = await getCharacter(characterId); } catch (e) {}
   const name = char ? char.name : 'TA';
   const avatarUrl = char && char.hasAvatar ? '/api/avatar/' + characterId : null;
 
   ritualShow(
-    '<canvas id="tunnelCanvas" class="tunnel-canvas"></canvas>' +
-    '<div class="ritual-center"><div class="ritual-text">正在穿越时光…</div></div>'
+    '<div class="ritual-center"><div class="ritual-eq"><span></span><span></span><span></span><span></span><span></span></div></div>'
   );
-  const canvas = document.getElementById('tunnelCanvas');
 
-  // 隧道与问候并行准备
-  const greetP = api('/api/chat/' + characterId + '/greet', { method: 'POST' }).catch(() => null);
-  await Promise.all([
-    runTunnel(canvas, false, 5000),
-    playWarpSound(5000),
-  ]);
+  const greet = await api('/api/chat/' + characterId + '/greet', { method: 'POST' }).catch(() => null);
   if (ritualSkipped) { enterChat(characterId); return; }
 
-  const greet = await greetP;
   const reply = (greet && greet.reply) || ('好久不见，我很想你。');
   const audioUrl = greet && greet.audioUrl;
-
-  // 听见声音（只留播放指示器，不放文字） → 画面渐显
-  ritualEl().querySelector('.ritual-center').innerHTML =
-    '<div class="ritual-eq"><span></span><span></span><span></span><span></span><span></span></div>';
   const audioP = playRitualAudio(audioUrl);
-  await sleep(1200);
-  if (ritualSkipped) { enterChat(characterId); return; }
 
   ritualEl().querySelector('.ritual-center').innerHTML =
     (avatarUrl
@@ -217,29 +125,25 @@ async function startMeetingRitual(characterId) {
     '<div class="ritual-reply">' + reply + '</div>';
   await audioP;
   if (ritualSkipped) { enterChat(characterId); return; }
-  await sleep(800);
 
-  // 进入对话按钮
   const center = ritualEl().querySelector('.ritual-center');
   const btn = document.createElement('button');
   btn.className = 'ritual-btn';
   btn.textContent = '开始对话';
   btn.onclick = () => enterChat(characterId);
   center.appendChild(btn);
-  // 隐藏跳过（已到终点）
   const skip = ritualEl().querySelector('.ritual-skip');
   if (skip) skip.style.display = 'none';
 }
 
 function enterChat(characterId) {
-  try { localStorage.setItem('ritual_seen_' + characterId, '1'); } catch (e) {}
   ritualHide();
   navigate('chat', characterId);
 }
 
-/** 告别仪式：告别语 → 反向穿越 → 摄像头回到现实 */
+/** 告别仪式：告别语之后直接回到现实，没有反向动画 */
 async function startFarewellRitual(characterId) {
-  ensureRitualAudio(); // 手势内激活音频
+  ensureRitualAudio();
   let char = null;
   try { char = await getCharacter(characterId); } catch (e) {}
   const name = char ? char.name : 'TA';
@@ -260,19 +164,7 @@ async function startFarewellRitual(characterId) {
   await playRitualAudio(fw && fw.audioUrl);
   if (ritualSkipped) { ritualHide(); return; }
 
-  // 反向穿越
   const overlay = ritualEl();
-  overlay.innerHTML =
-    '<canvas id="tunnelCanvas" class="tunnel-canvas"></canvas>' +
-    '<div class="ritual-center"><div class="ritual-text">正在回到现实…</div></div>' +
-    '<button class="ritual-skip" onclick="skipRitual()">跳过 ›</button>';
-  await Promise.all([
-    runTunnel(document.getElementById('tunnelCanvas'), true, 5000),
-    playWarpSound(5000),
-  ]);
-  if (ritualSkipped) { ritualHide(); return; }
-
-  // 摄像头：回到现在
   overlay.innerHTML =
     '<div class="camera-wrap"><video id="ritualVideo" autoplay playsinline muted></video>' +
     '<div class="camera-mask"></div>' +
@@ -299,7 +191,7 @@ function closeFarewell() {
 }
 
 // ===== 建角成功后的时光隧道成片 =====
-// 只在创建角色成功、进入首页之前播放。再次打开角色仍走上面的粒子初见仪式。
+// 只在创建角色成功、进入首页之前播放。再次打开角色直接进对话。
 const TUNNEL_INTRO_SRC = '/assets/tunnel-rewind.mp4';
 let tunnelPhase = 'idle'; // idle | priming | playing
 let tunnelIntroResolve = null;

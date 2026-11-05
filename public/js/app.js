@@ -158,13 +158,9 @@ async function api(path, opts) {
 }
 
 // ===== 首页：角色列表 =====
-// 打开角色：首次走初见粒子仪式再进对话，之后直进对话。
-// 建角成功后进首页前的过渡是成片（playCreationTunnel），不走这里。
+// 打开角色直接进对话。建角成功后进首页前的过渡是成片（playCreationTunnel）。
 function openCharacter(id) {
-  let seen = false;
-  try { seen = !!localStorage.getItem('ritual_seen_' + id); } catch (e) {}
-  if (seen || typeof startMeetingRitual !== 'function') navigate('chat', id);
-  else startMeetingRitual(id);
+  navigate('chat', id);
 }
 
 async function loadCharacters() {
