@@ -7,7 +7,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕊️</text></svg>">
   <title>常伴</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=4">
 </head>
 <body>
   <div id="app">
@@ -307,7 +307,17 @@
     </main>
   </div>
 
-  <script src="/js/app.js?v=3"></script>
-  <script src="/js/ritual.js?v=1"></script>
+  <!-- 建角成功 → 主页 的时光隧道成片。注册页不挂这段视频。 -->
+  <div id="tunnelIntro" class="tunnel-intro" hidden>
+    <div class="tunnel-intro-card">
+      <p class="tunnel-intro-wait" id="tunnelIntroWait">正在穿越时光…</p>
+      <video id="tunnelIntroVideo" playsinline webkit-playsinline disablepictureinpicture preload="auto" src="/assets/tunnel-rewind.mp4"></video>
+    </div>
+    <button type="button" class="tunnel-intro-unmute" id="tunnelIntroUnmute" hidden>开启声音</button>
+    <button type="button" class="tunnel-intro-skip" id="tunnelIntroSkip">跳过</button>
+  </div>
+
+  <script src="/js/app.js?v=4"></script>
+  <script src="/js/ritual.js?v=2"></script>
 </body>
 </html>

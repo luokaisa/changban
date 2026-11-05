@@ -297,3 +297,157 @@ async function startFarewellRitual(characterId) {
 function closeFarewell() {
   ritualHide();
 }
+
+// ===== 建角成功后的时光隧道成片 =====
+// 只在创建角色成功、进入首页之前播放。再次打开角色仍走上面的粒子初见仪式。
+const TUNNEL_INTRO_SRC = '/assets/tunnel-rewind.mp4';
+let tunnelPhase = 'idle'; // idle | priming | playing
+let tunnelIntroResolve = null;
+let tunnelIntroBound = false;
+
+function tunnelIntroNodes() {
+  return {
+    el: document.getElementById('tunnelIntro'),
+    video: document.getElementById('tunnelIntroVideo'),
+    unmute: document.getElementById('tunnelIntroUnmute'),
+  };
+}
+
+function setTunnelShell(mode) {
+  const el = document.getElementById('tunnelIntro');
+  if (!el) return;
+  el.classList.toggle('is-priming', mode === 'prime');
+  el.classList.toggle('is-open', mode === 'open');
+  el.hidden = mode === 'off';
+}
+
+function setTunnelUnmute(visible) {
+  const btn = document.getElementById('tunnelIntroUnmute');
+  if (btn) btn.hidden = !visible;
+}
+
+function bindTunnelIntro() {
+  if (tunnelIntroBound) return;
+  const nodes = tunnelIntroNodes();
+  if (!nodes.video || !nodes.el) return;
+  tunnelIntroBound = true;
+  nodes.video.playsInline = true;
+  nodes.video.setAttribute('playsinline', 'true');
+  nodes.video.setAttribute('webkit-playsinline', 'true');
+  if (!nodes.video.getAttribute('src')) nodes.video.src = TUNNEL_INTRO_SRC;
+  nodes.video.addEventListener('playing', function() {
+    const card = nodes.video.closest('.tunnel-intro-card');
+    if (card) card.classList.add('is-playing');
+  });
+  nodes.video.addEventListener('ended', finishCreationTunnel);
+  nodes.video.addEventListener('error', function() {
+    if (tunnelPhase === 'playing') finishCreationTunnel();
+  });
+  const skip = document.getElementById('tunnelIntroSkip');
+  if (skip) skip.addEventListener('click', finishCreationTunnel);
+  if (nodes.unmute) {
+    nodes.unmute.addEventListener('click', function() {
+      nodes.video.muted = false;
+      setTunnelUnmute(false);
+      const p = nodes.video.play();
+      if (p && p.catch) p.catch(function() {});
+    });
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && tunnelPhase === 'playing') finishCreationTunnel();
+  });
+}
+
+/** 在创建按钮的点击手势里调用，解锁之后的有声播放。失败不影响建角。 */
+function primeCreationTunnel() {
+  bindTunnelIntro();
+  const video = document.getElementById('tunnelIntroVideo');
+  if (!video || tunnelPhase === 'playing') return;
+  tunnelPhase = 'priming';
+  setTunnelUnmute(false);
+  setTunnelShell('prime');
+  video.muted = false;
+  try { video.currentTime = 0; } catch (e) {}
+  const p = video.play();
+  if (p && p.then) {
+    p.then(function() {
+      // 正式开播后不要再暂停；失败或已取消时必须停掉，避免藏着出声
+      if (tunnelPhase === 'playing') return;
+      video.pause();
+      try { video.currentTime = 0; } catch (e) {}
+      if (tunnelPhase === 'priming') setTunnelShell('off');
+    }).catch(function() {
+      if (tunnelPhase === 'priming') setTunnelShell('off');
+    });
+  }
+}
+
+/** 建角失败时收起预热，避免挡住报错。 */
+function cancelCreationTunnel() {
+  if (tunnelPhase === 'playing') return;
+  tunnelPhase = 'idle';
+  const video = document.getElementById('tunnelIntroVideo');
+  if (video) {
+    try { video.pause(); } catch (e) {}
+    try { video.currentTime = 0; } catch (e) {}
+  }
+  setTunnelUnmute(false);
+  setTunnelShell('off');
+}
+
+/**
+ * 播放 4:3 时光隧道成片。播完或跳过 resolve。
+ * 资源缺失或自动播放被彻底拦截时也会结束，避免卡在遮罩上。
+ */
+function playCreationTunnel() {
+  return new Promise(function(resolve) {
+    bindTunnelIntro();
+    const nodes = tunnelIntroNodes();
+    if (!nodes.el || !nodes.video) { resolve(); return; }
+    tunnelPhase = 'playing';
+    tunnelIntroResolve = resolve;
+    setTunnelUnmute(false);
+    const card = nodes.el.querySelector('.tunnel-intro-card');
+    if (card) card.classList.remove('is-playing');
+    setTunnelShell('open');
+    try { nodes.video.currentTime = 0; } catch (e) {}
+    nodes.video.muted = false;
+    const started = nodes.video.play();
+    if (started && started.catch) {
+      started.catch(function() {
+        if (tunnelPhase !== 'playing') return;
+        // 手势已过期时退到静音播放，并给一次开声入口
+        nodes.video.muted = true;
+        setTunnelUnmute(true);
+        const retry = nodes.video.play();
+        if (retry && retry.then) {
+          retry.then(function() {
+            if (tunnelPhase !== 'playing') nodes.video.pause();
+          }).catch(function() {
+            if (tunnelPhase === 'playing') finishCreationTunnel();
+          });
+        }
+      });
+    }
+  });
+}
+
+function finishCreationTunnel() {
+  if (tunnelPhase !== 'playing') return;
+  const resolve = tunnelIntroResolve;
+  tunnelIntroResolve = null;
+  tunnelPhase = 'idle';
+  const nodes = tunnelIntroNodes();
+  if (nodes.video) {
+    try { nodes.video.pause(); } catch (e) {}
+    try { nodes.video.currentTime = 0; } catch (e) {}
+    nodes.video.muted = false;
+  }
+  if (nodes.el) {
+    const card = nodes.el.querySelector('.tunnel-intro-card');
+    if (card) card.classList.remove('is-playing');
+  }
+  setTunnelUnmute(false);
+  setTunnelShell('off');
+  if (resolve) resolve();
+}

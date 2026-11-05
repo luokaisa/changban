@@ -158,7 +158,8 @@ async function api(path, opts) {
 }
 
 // ===== 首页：角色列表 =====
-// 打开角色：首次走初见仪式，之后直进对话
+// 打开角色：首次走初见粒子仪式再进对话，之后直进对话。
+// 建角成功后进首页前的过渡是成片（playCreationTunnel），不走这里。
 function openCharacter(id) {
   let seen = false;
   try { seen = !!localStorage.getItem('ritual_seen_' + id); } catch (e) {}
@@ -194,6 +195,8 @@ async function saveCharacter(e) {
   if (!name) return toast('\u8BF7\u586B\u5199\u79F0\u547C');
   var consent = document.getElementById('charConsent');
   if (consent && !consent.checked) return toast('\u8BF7\u5148\u786E\u8BA4\u6388\u6743\u58F0\u660E');
+  // 提交手势里先解锁成片，避免请求返回后手机禁播有声视频
+  if (typeof primeCreationTunnel === 'function') primeCreationTunnel();
   try {
     await api('/api/characters', {
       method: 'POST',
@@ -206,10 +209,13 @@ async function saveCharacter(e) {
         consent: !!(consent && consent.checked),
       }),
     });
-    toast('\u2728 \u89D2\u8272\u521B\u5EFA\u6210\u529F');
     e.target.reset();
+    // 建角成功：先播时光隧道成片（可跳过），再进首页，不直接开对话
+    if (typeof playCreationTunnel === 'function') await playCreationTunnel();
     navigate('home');
+    toast('\u2728 \u89D2\u8272\u521B\u5EFA\u6210\u529F');
   } catch (err) {
+    if (typeof cancelCreationTunnel === 'function') cancelCreationTunnel();
     toast('\u274C ' + err.message);
     if (err.message.indexOf('实名') !== -1) navigate('settings');
   }
