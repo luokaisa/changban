@@ -20,12 +20,14 @@ module.exports = {
   uploadsDir: path.join(__dirname, '..', 'public', 'uploads'),
   // 临时测试：主站用户名密码注册。正式产品仍强制手机号注册。
   // 未设置时非 production 开启；DEV_REGISTER=false 或 NODE_ENV=production 关闭。
-  devRegister: resolveDevRegister(),
+  devRegister: envFlag('DEV_REGISTER', process.env.NODE_ENV !== 'production'),
+  // 临时测试：跳过实名。正式版（production 或 DEV_SKIP_VERIFY=false）仍强制。
+  skipVerify: envFlag('DEV_SKIP_VERIFY', process.env.NODE_ENV !== 'production'),
 };
 
-function resolveDevRegister() {
-  const v = (process.env.DEV_REGISTER || '').trim().toLowerCase();
+function envFlag(name, whenUnset) {
+  const v = (process.env[name] || '').trim().toLowerCase();
   if (v === '1' || v === 'true' || v === 'on' || v === 'yes') return true;
   if (v === '0' || v === 'false' || v === 'off' || v === 'no') return false;
-  return process.env.NODE_ENV !== 'production';
+  return whenUnset;
 }

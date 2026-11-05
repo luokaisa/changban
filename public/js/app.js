@@ -11,6 +11,7 @@ let recordingTimer = null;
 
 // ===== 认证 =====
 let currentUser = null;
+let skipVerify = false;
 
 function getToken() { return localStorage.getItem('auth_token'); }
 
@@ -22,6 +23,7 @@ async function checkAuth() {
     if (!res.ok) throw new Error();
     var data = await res.json();
     currentUser = data.user;
+    if (data.skipVerify === true || data.skipVerify === false) skipVerify = data.skipVerify;
     hideLogin();
     updateVerifyStatus();
     await checkNotice();
@@ -73,6 +75,7 @@ async function enterAfterAuth(token, user) {
     if (res.ok) {
       var data = await res.json();
       if (data.user) currentUser = data.user;
+      if (data.skipVerify === true || data.skipVerify === false) skipVerify = data.skipVerify;
     }
   } catch (e) {}
   hideLogin();
@@ -173,6 +176,7 @@ async function initAuth() {
     if (res.ok) data = await res.json();
   } catch (e) {}
   var dev = devRegisterEnabled(data.devRegister);
+  if (data.skipVerify === true || data.skipVerify === false) skipVerify = data.skipVerify;
   applyDevRegisterUi(dev);
   if (dev && !data.hasUsers) showAuthTab('register');
   // 正式产品：还没有用户时强制去手机号注册。测试入口打开时留在主站。
@@ -325,7 +329,13 @@ async function saveCharacter(e) {
 // ===== 合规：已登录用户补实名认证 =====
 function updateVerifyStatus() {
   var el = document.getElementById('verifyStatus');
+  var form = document.getElementById('verifyForm');
+  if (form) form.hidden = !!skipVerify;
   if (!el) return;
+  if (skipVerify) {
+    el.textContent = '测试阶段已关闭。正式版创建角色与克隆声音前仍需实名认证。';
+    return;
+  }
   if (currentUser && currentUser.verified) {
     el.textContent = '✅ 已实名' + (currentUser.realName ? '（' + currentUser.realName + '）' : '');
   } else {
