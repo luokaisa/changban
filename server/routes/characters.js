@@ -4,6 +4,7 @@ const storage = require('../services/storage');
 const memories = require('../services/memories');
 const wallet = require('../services/wallet');
 const elevenlabs = require('../services/elevenlabs');
+const config = require('../config');
 const { v4: uuidv4 } = require('uuid');
 
 /** 获取当前用户的角色列表（含记忆点/完整度） */
@@ -74,10 +75,10 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   const { name, relationship, personality, memories } = req.body;
   if (!name) return res.status(400).json({ error: '请填写角色姓名' });
-  // 合规：未实名用户不得创建 AI 纪念角色（含老账号、一键登录自动注册账号）
+  // 合规：未实名用户不得创建 AI 纪念角色。测试模式（DEV_SKIP_VERIFY / 非 production）放行，正式版仍拦。
   const users = storage.read('users');
   const me = users[req.user.username];
-  if (!me || me.verified !== true) {
+  if (!config.skipVerify && (!me || me.verified !== true)) {
     return res.status(403).json({ error: '请先完成实名认证', needVerify: true });
   }
   // 合规：创建 AI 纪念角色须确认已获得逝者生前意愿或全体近亲属一致书面同意

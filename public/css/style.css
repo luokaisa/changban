@@ -806,6 +806,79 @@ form { display: flex; flex-direction: column; gap: 16px; }
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  margin: -8px 0 14px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+}
+.auth-tab.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--purple), var(--pink));
+}
+.auth-form[hidden],
+.auth-tabs[hidden],
+.auth-divider[hidden],
+.auth-phone-primary[hidden],
+.auth-phone-minor[hidden],
+.dev-register-note[hidden] { display: none !important; }
+.auth-phone-primary {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  padding: 14px;
+  border-radius: 10px;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.auth-phone-minor {
+  color: var(--purple-light);
+  font-size: 12px;
+  text-decoration: underline;
+  margin: 0 4px;
+}
+.dev-register-note {
+  width: 100%;
+  max-width: 320px;
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.dev-register-note button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+}
+.dev-register-badge {
+  align-self: flex-start;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: #f5e9d0;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 8px;
+}
+.auth-form input[type="date"] { color-scheme: dark; }
 
 .code-row {
   display: flex;
@@ -1146,12 +1219,6 @@ form { display: flex; flex-direction: column; gap: 16px; }
   justify-content: center;
   overflow: hidden;
 }
-.tunnel-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
 .ritual-center {
   position: relative;
   z-index: 2;
@@ -1292,3 +1359,81 @@ form { display: flex; flex-direction: column; gap: 16px; }
   0%, 100% { height: 14px; }
   50% { height: 54px; }
 }
+
+/* ===== 建角成功 → 首页：时光隧道成片（4:3 居中，不拉满竖屏） ===== */
+.tunnel-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 18px calc(28px + env(safe-area-inset-bottom));
+  background: rgba(5, 5, 12, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.tunnel-intro[hidden] { display: none !important; }
+.tunnel-intro.is-priming {
+  visibility: hidden;
+  pointer-events: none;
+}
+.tunnel-intro-card {
+  position: relative;
+  width: min(92vw, calc((100vh - 120px) * 4 / 3), 720px);
+  max-height: calc(100vh - 120px);
+  aspect-ratio: 4 / 3;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0b0b14;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(245, 233, 208, 0.12);
+}
+.tunnel-intro-card video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.tunnel-intro-wait {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: #f5e9d0;
+  letter-spacing: 3px;
+  font-size: 15px;
+  pointer-events: none;
+}
+.tunnel-intro-card.is-playing .tunnel-intro-wait { display: none; }
+.tunnel-intro-skip {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.88);
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tunnel-intro-unmute {
+  position: absolute;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  background: rgba(255, 255, 255, 0.16);
+  color: #f5e9d0;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.tunnel-intro-unmute[hidden] { display: none !important; }
